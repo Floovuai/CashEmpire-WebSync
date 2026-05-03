@@ -109,7 +109,8 @@ body::-webkit-scrollbar-thumb:hover,
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -276,19 +277,22 @@ h3 {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: var(--control-h);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #111510;
   color: var(--text);
+  font-size: 16px;
   outline: none;
   padding: 9px 12px;
 }
 
 input:focus,
 select:focus,
+textarea:focus,
 button:focus-visible {
   border-color: var(--focus);
   outline: 2px solid rgba(121, 215, 255, 0.22);
@@ -316,6 +320,14 @@ input[aria-invalid="true"] {
   color: var(--red);
   font-size: 0.82rem;
   margin: 0;
+}
+
+.field-error[data-tone="ok"] {
+  color: var(--green);
+}
+
+.field-error[data-tone="muted"] {
+  color: var(--muted);
 }
 
 .field-error:empty {
@@ -453,7 +465,8 @@ input[aria-invalid="true"] {
   grid-template-columns: 1fr;
 }
 
-.load-slot-wrap {
+.load-slot-wrap,
+.cloud-slot-wrap {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
   gap: var(--space-xs);
@@ -463,6 +476,12 @@ input[aria-invalid="true"] {
   display: grid;
   gap: var(--space-xs);
   margin-top: var(--space-sm);
+}
+
+.cloud-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-xs);
 }
 
 .cloud-entry-copy {
@@ -3882,6 +3901,14 @@ input[aria-invalid="true"] {
     grid-column: span 1;
   }
 
+  .cloud-entry {
+    grid-column: 1 / -1;
+  }
+
+  .cloud-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(180px, 0.8fr) minmax(150px, auto);
+  }
+
   .app-header {
     grid-template-columns: minmax(210px, 1fr) minmax(300px, 1fr) minmax(174px, auto);
     align-items: center;
@@ -5197,6 +5224,18 @@ input[aria-invalid="true"] {
     padding-bottom: 0;
   }
 
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  input[data-money-input],
+  #trade-quantity {
+    scroll-margin-top: calc(var(--view-scroll-top) + 14px);
+    scroll-margin-bottom: calc(44dvh + env(safe-area-inset-bottom));
+  }
+
   .app-header {
     position: relative;
     z-index: 25;
@@ -5837,7 +5876,8 @@ input[aria-invalid="true"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .load-slot-wrap {
+  .load-slot-wrap,
+  .cloud-slot-wrap {
     grid-template-columns: minmax(0, 1fr);
   }
 

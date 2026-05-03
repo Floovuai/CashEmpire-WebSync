@@ -50,6 +50,23 @@ function isValidSlot(slot) {
   return Number.isInteger(slot) && slot >= 1 && slot <= 3;
 }
 
+function summarizeSlots(account) {
+  return Object.values(account.slots || {})
+    .map((entry) => {
+      const state = entry && entry.state && typeof entry.state === "object" ? entry.state : {};
+      const player = state.player && typeof state.player === "object" ? state.player : {};
+      const time = state.time && typeof state.time === "object" ? state.time : {};
+      return {
+        slot: Number(entry.slot),
+        updatedAt: entry.updatedAt || null,
+        playerName: typeof player.name === "string" ? player.name : "",
+        day: Number.isFinite(Number(time.day)) ? Number(time.day) : null
+      };
+    })
+    .filter((entry) => isValidSlot(entry.slot))
+    .sort((a, b) => a.slot - b.slot);
+}
+
 function parseJsonBody(request) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -96,6 +113,22 @@ function verifyOrCreateAccount(store, handle, passphrase) {
   return { ok: true, created: false, account: existing };
 }
 
+function verifyExistingAccount(store, handle, passphrase) {
+  const normalizedHandle = normalizeHandle(handle);
+  const normalizedPassphrase = String(passphrase || "").trim();
+  if (!normalizedHandle) return { ok: false, status: 400, message: "Handle invalido." };
+  if (normalizedPassphrase.length < 6) return { ok: false, status: 400, message: "La clave debe tener al menos 6 caracteres." };
+
+  const existing = store.accounts[normalizedHandle];
+  if (!existing) {
+    return { ok: false, status: 404, message: "No existe una cuenta nube con ese handle. Primero sube la partida desde el celular." };
+  }
+  if (existing.secretHash !== hashSecret(normalizedPassphrase)) {
+    return { ok: false, status: 401, message: "La clave no coincide con esa cuenta." };
+  }
+  return { ok: true, created: false, account: existing };
+}
+
 async function handleConnect(request, response) {
   const store = readStore();
   const body = await parseJsonBody(request);
@@ -107,7 +140,19 @@ async function handleConnect(request, response) {
     ok: true,
     created: result.created,
     handle: result.account.handle,
-    slots: Object.keys(result.account.slots || {}).map((slot) => Number(slot)).sort((a, b) => a - b)
+    slots: summarizeSlots(result.account)
+  });
+}
+
+async function handleList(request, response) {
+  const store = readStore();
+  const body = await parseJsonBody(request);
+  const result = verifyExistingAccount(store, body.handle, body.passphrase);
+  if (!result.ok) return json(response, result.status, { ok: false, message: result.message });
+  json(response, 200, {
+    ok: true,
+    handle: result.account.handle,
+    slots: summarizeSlots(result.account)
   });
 }
 
@@ -133,7 +178,7 @@ async function handlePush(request, response) {
 async function handlePull(request, response) {
   const store = readStore();
   const body = await parseJsonBody(request);
-  const result = verifyOrCreateAccount(store, body.handle, body.passphrase);
+  const result = verifyExistingAccount(store, body.handle, body.passphrase);
   if (!result.ok) return json(response, result.status, { ok: false, message: result.message });
   const slot = Number(body.slot);
   if (!isValidSlot(slot)) return json(response, 400, { ok: false, message: "Slot invalido." });
@@ -148,6 +193,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "OPTIONS") return json(response, 200, { ok: true });
     if (request.method === "GET" && request.url === "/health") return json(response, 200, { ok: true, service: "cash-empire-sync", now: new Date().toISOString() });
     if (request.method === "POST" && request.url === "/api/sync/connect") return handleConnect(request, response);
+    if (request.method === "POST" && request.url === "/api/sync/list") return handleList(request, response);
     if (request.method === "POST" && request.url === "/api/sync/push") return handlePush(request, response);
     if (request.method === "POST" && request.url === "/api/sync/pull") return handlePull(request, response);
     json(response, 404, { ok: false, message: "Ruta no encontrada." });

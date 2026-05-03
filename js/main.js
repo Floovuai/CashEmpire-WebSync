@@ -43,6 +43,7 @@
   const empireLocationPinElements = new Map();
   const empireLocationProjectionMap = new Map();
   const empireLocationDataMap = new Map();
+  let cloudRemoteSlots = [];
 
   const ONBOARDING_REWARDS = {
     firstBuy: { cash: 500, tier: "Basica", label: "+$500 jugador" },
@@ -161,6 +162,12 @@
     loadCloudButton: q("#btn-load-cloud"),
     loadSlotWrap: q("#load-slot-wrap"),
     loadSlot: q("#load-slot"),
+    cloudLoadSlot: q("#cloud-load-slot"),
+    cloudSlotWrap: q(".cloud-slot-wrap"),
+    cloudHandle: q("#cloud-handle"),
+    cloudPassphrase: q("#cloud-passphrase"),
+    cloudBaseUrl: q("#cloud-base-url"),
+    cloudCheckButton: q("#btn-cloud-check"),
     cloudSetupStatus: q("#cloud-setup-status"),
     avatarButtons: document.querySelectorAll("[data-avatar-id]"),
     difficultyButtons: document.querySelectorAll(".difficulty"),
@@ -1046,9 +1053,11 @@
     });
     if (els.loadSlotWrap && storage.hasSave()) {
       els.loadSlotWrap.hidden = false;
-      els.loadButton.disabled = false;
-      els.loadSlot.disabled = false;
+      els.loadButton.disabled = isBusy;
+      els.loadSlot.disabled = isBusy;
     }
+    if (els.loadCloudButton) els.loadCloudButton.disabled = isBusy || cloudRemoteSlots.length === 0;
+    if (els.cloudLoadSlot) els.cloudLoadSlot.disabled = isBusy || cloudRemoteSlots.length === 0;
   }
 
   function prefersReducedMotion() {
@@ -1141,7 +1150,7 @@
 
   function validateSetup() {
     const name = els.playerName.value.trim();
-    const budget = Number(els.initialBudget.value);
+    const budget = parseMoneyInput(els.initialBudget.value);
     let valid = true;
     let firstInvalid = null;
 
@@ -1164,7 +1173,7 @@
       valid = false;
     }
 
-    if (firstInvalid) firstInvalid.focus();
+    if (firstInvalid) firstInvalid.focus({ preventScroll: true });
     return valid;
   }
 
@@ -2994,6 +3003,13 @@
     return ["text", "search", "tel", "url", "password"].includes(type);
   }
 
+  function isTouchViewport() {
+    return Boolean(
+      (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) ||
+      window.innerWidth <= 679
+    );
+  }
+
   function normalizeMoneyInput(input) {
     if (!input) return;
     const value = input.value;
@@ -3015,15 +3031,21 @@
     }
   }
 
-  function focusAmountInput(input) {
+  function focusAmountInput(input, options = {}) {
     if (!input) return;
-    if (typeof input.scrollIntoView === "function") {
-      input.scrollIntoView({ block: "center", inline: "nearest" });
+    const touchViewport = isTouchViewport();
+    const target = input.closest(".business-contribution, .modal, .inline-form") || input;
+    if (typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({
+        block: touchViewport ? "nearest" : "center",
+        inline: "nearest",
+        behavior: prefersReducedMotion() ? "auto" : "smooth"
+      });
     }
-    input.focus();
-    const isTouchViewport = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if (touchViewport && !options.allowTouchFocus) return;
+    input.focus({ preventScroll: true });
     const canSelect = supportsTextSelection(input);
-    if (!isTouchViewport && canSelect && typeof input.select === "function" && input.value) {
+    if (!touchViewport && canSelect && typeof input.select === "function" && input.value) {
       window.setTimeout(() => {
         try {
           input.select();
@@ -3656,7 +3678,7 @@
             <input type="hidden" name="businessAction" value="${amountConfig ? activeAmountAction : ""}" />
             <div>
               <label for="amount-${businessId}">${escapeHtml(amountConfig ? amountConfig.inputLabel : "Monto")}</label>
-              <input id="amount-${businessId}" name="actionAmount" type="number" min="${amountConfig ? amountConfig.min : 0}" max="${amountConfig ? amountConfig.available : 0}" step="${amountConfig ? amountConfig.step : 1}" inputmode="numeric" placeholder="${escapeHtml(amountConfig ? amountConfig.inputLabel : "Monto")}" value="${amountConfig ? amountConfig.value : ""}" />
+              <input id="amount-${businessId}" name="actionAmount" type="tel" min="${amountConfig ? amountConfig.min : 0}" max="${amountConfig ? amountConfig.available : 0}" step="${amountConfig ? amountConfig.step : 1}" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="${escapeHtml(amountConfig ? amountConfig.inputLabel : "Monto")}" value="${amountConfig ? amountConfig.value : ""}" data-money-input="business-action" />
               ${amountConfig ? `<p class="amount-availability"><span>${escapeHtml(amountConfig.availableLabel)}</span><strong>${formatMoney(amountConfig.available)}</strong></p>` : ""}
             </div>
             <button class="btn btn-secondary btn-small" type="button" data-business-amount-max="${businessId}" data-business-amount-suggested="${amountConfig ? amountConfig.value : ""}" data-business-amount-available="${amountConfig ? amountConfig.available : 0}">Usar sugerido</button>
@@ -4198,7 +4220,7 @@
     els.tradeQuantity.value = side === "sell" && owned > 0 ? String(Math.min(owned, step)) : String(step);
     els.tradeModal.hidden = false;
     updateTradeEstimate();
-    window.setTimeout(() => els.tradeQuantity.focus({ preventScroll: true }), 0);
+    window.setTimeout(() => focusAmountInput(els.tradeQuantity), 0);
   }
 
   function closeTradeModal() {
@@ -4236,6 +4258,125 @@
     }
     if (typeof message === "string" && els.cloudSetupStatus) {
       els.cloudSetupStatus.textContent = message;
+      delete els.cloudSetupStatus.dataset.tone;
+    }
+  }
+
+  function setCloudSetupStatus(message, tone) {
+    if (!els.cloudSetupStatus) return;
+    els.cloudSetupStatus.textContent = message || "";
+    if (tone) {
+      els.cloudSetupStatus.dataset.tone = tone;
+    } else {
+      delete els.cloudSetupStatus.dataset.tone;
+    }
+  }
+
+  function normalizeCloudSlotSummary(slot) {
+    if (typeof slot === "number") return { slot };
+    if (!slot || typeof slot !== "object") return null;
+    const slotNumber = Number(slot.slot);
+    if (!Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 3) return null;
+    return {
+      slot: slotNumber,
+      playerName: typeof slot.playerName === "string" ? slot.playerName.trim() : "",
+      day: Number.isFinite(Number(slot.day)) ? Number(slot.day) : null,
+      updatedAt: typeof slot.updatedAt === "string" ? slot.updatedAt : ""
+    };
+  }
+
+  function formatCloudSlotLabel(slot) {
+    const parts = [`Slot nube ${slot.slot}`];
+    if (slot.playerName) parts.push(slot.playerName);
+    if (Number.isFinite(slot.day)) parts.push(`Dia ${slot.day}`);
+    return parts.join(" / ");
+  }
+
+  function renderCloudSetupSlots(slots) {
+    if (!els.cloudLoadSlot) return;
+    cloudRemoteSlots = (Array.isArray(slots) ? slots : [])
+      .map(normalizeCloudSlotSummary)
+      .filter(Boolean)
+      .sort((a, b) => a.slot - b.slot);
+
+    els.cloudLoadSlot.innerHTML = "";
+    if (cloudRemoteSlots.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Sin slots remotos";
+      els.cloudLoadSlot.appendChild(option);
+    } else {
+      cloudRemoteSlots.forEach((slot) => {
+        const option = document.createElement("option");
+        option.value = String(slot.slot);
+        option.textContent = formatCloudSlotLabel(slot);
+        els.cloudLoadSlot.appendChild(option);
+      });
+    }
+
+    els.cloudLoadSlot.disabled = cloudRemoteSlots.length === 0;
+    if (els.loadCloudButton) els.loadCloudButton.disabled = cloudRemoteSlots.length === 0;
+  }
+
+  function hydrateCloudSetupFields() {
+    if (!cloudSync) return;
+    const current = cloudSync.readConfig && cloudSync.readConfig();
+    if (els.cloudHandle && current && current.handle) els.cloudHandle.value = current.handle;
+    if (els.cloudPassphrase && current && current.passphrase) els.cloudPassphrase.value = current.passphrase;
+    if (els.cloudBaseUrl) {
+      els.cloudBaseUrl.value = current && current.baseUrl ? current.baseUrl : cloudSync.DEFAULT_BASE_URL;
+    }
+    renderCloudSetupSlots([]);
+  }
+
+  function readCloudSetupCredentials() {
+    if (!cloudSync || typeof cloudSync.listSlots !== "function") {
+      setCloudSetupStatus("Modulo de nube no disponible.", "error");
+      return null;
+    }
+
+    const handle = els.cloudHandle ? els.cloudHandle.value.trim() : "";
+    const passphrase = els.cloudPassphrase ? els.cloudPassphrase.value : "";
+    const baseUrl = els.cloudBaseUrl ? els.cloudBaseUrl.value.trim() : cloudSync.DEFAULT_BASE_URL;
+    if (!handle) {
+      setCloudSetupStatus("Escribe el handle que usaste en el celular.", "error");
+      return null;
+    }
+    if (!passphrase || passphrase.trim().length < 6) {
+      setCloudSetupStatus("Escribe la clave de sincronizacion, minimo 6 caracteres.", "error");
+      return null;
+    }
+    if (!baseUrl) {
+      setCloudSetupStatus("Escribe la URL del servidor sync.", "error");
+      return null;
+    }
+    return { handle, passphrase, baseUrl };
+  }
+
+  async function refreshCloudSetupSlots() {
+    const credentials = readCloudSetupCredentials();
+    if (!credentials) return false;
+
+    setSetupBusy(true);
+    setCloudSetupStatus("Buscando partida en nube...", "muted");
+    try {
+      const result = await cloudSync.listSlots(credentials);
+      renderCloudSetupSlots(result.slots);
+      updateCloudStatus();
+      if (cloudRemoteSlots.length === 0) {
+        setCloudSetupStatus("Cuenta encontrada, pero no tiene slots remotos. Abre la partida en el celular y usa Subir slot actual.", "error");
+        return false;
+      }
+      setCloudSetupStatus(`Encontrados ${cloudRemoteSlots.length} slot(s) remotos. Elige uno y carga.`, "ok");
+      return true;
+    } catch (error) {
+      console.error(error);
+      renderCloudSetupSlots([]);
+      setCloudSetupStatus(error.message || "No se pudo buscar la partida en nube.", "error");
+      showToast(error.message || "No se pudo buscar la partida en nube.", "error");
+      return false;
+    } finally {
+      setSetupBusy(false);
     }
   }
 
@@ -4415,7 +4556,7 @@
     currentSlot = Number(els.loadSlot.value || 1);
     state = storage.createInitialState({
       playerName: els.playerName.value,
-      initialBudget: els.initialBudget.value,
+      initialBudget: parseMoneyInput(els.initialBudget.value),
       difficulty: selectedDifficulty,
       avatarId: selectedAvatarId,
       scenario: selectedScenario
@@ -4810,7 +4951,7 @@
       if (hiddenAction) hiddenAction.value = action || "";
       if (isOpen) {
         const input = panel.querySelector("input[name='actionAmount']");
-        window.setTimeout(() => input && input.focus({ preventScroll: true }), 0);
+        window.setTimeout(() => focusAmountInput(input), 0);
       }
     }
 
@@ -4825,7 +4966,7 @@
       window.setTimeout(() => {
         const freshPanel = getBusinessAmountPanel(businessId);
         const input = freshPanel ? freshPanel.querySelector("input[name='actionAmount']") : null;
-        if (input) input.focus({ preventScroll: true });
+        focusAmountInput(input);
       }, 0);
     }
   }
@@ -4885,7 +5026,7 @@
         const available = Number(amountMax.dataset.businessAmountAvailable);
         const nextAmount = Number.isFinite(suggested) && suggested > 0 ? suggested : available;
         if (Number.isFinite(nextAmount) && nextAmount > 0) input.value = String(Math.floor(nextAmount));
-        input.focus({ preventScroll: true });
+        focusAmountInput(input);
       }
     }
   }
@@ -4935,7 +5076,7 @@
     const businessId = amountForm.dataset.businessAmountPanel;
     const action = (amountForm.querySelector("input[name='businessAction']") || {}).value;
     const input = amountForm.querySelector("input[name='actionAmount']");
-    const amount = Number(input && input.value);
+    const amount = parseMoneyInput(input && input.value);
 
     if (!Number.isFinite(amount) || amount <= 0) {
       showToast("Ingresa un monto valido para esta decision.", "error");
@@ -5143,9 +5284,28 @@
   function bindEvents() {
     els.setupForm.addEventListener("submit", startGame);
     els.loadButton.addEventListener("click", loadGame);
+    if (els.cloudCheckButton) {
+      els.cloudCheckButton.addEventListener("click", refreshCloudSetupSlots);
+    }
+    [els.cloudHandle, els.cloudPassphrase, els.cloudBaseUrl]
+      .filter(Boolean)
+      .forEach((input) => {
+        input.addEventListener("input", () => {
+          renderCloudSetupSlots([]);
+          setCloudSetupStatus("");
+        });
+      });
     if (els.loadCloudButton) {
       els.loadCloudButton.addEventListener("click", async () => {
-        currentSlot = Number(els.loadSlot.value || 1);
+        if (cloudRemoteSlots.length === 0) {
+          const found = await refreshCloudSetupSlots();
+          if (!found) return;
+        }
+        currentSlot = Number(els.cloudLoadSlot && els.cloudLoadSlot.value || 0);
+        if (!Number.isInteger(currentSlot) || currentSlot < 1 || currentSlot > 3) {
+          setCloudSetupStatus("Elige un slot remoto disponible.", "error");
+          return;
+        }
         await pullCloudSlotToCurrent();
         if (state) {
           setSetupBusy(true);
@@ -5159,6 +5319,7 @@
       els.playerName.setAttribute("aria-invalid", "false");
     });
     els.initialBudget.addEventListener("input", () => {
+      normalizeMoneyInput(els.initialBudget);
       els.budgetError.textContent = "";
       els.initialBudget.setAttribute("aria-invalid", "false");
     });
@@ -5372,6 +5533,7 @@
     setSetupBusy(false);
     updateLoadButton();
     updateCloudStatus();
+    hydrateCloudSetupFields();
     bindEvents();
   }
 

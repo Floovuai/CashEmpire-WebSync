@@ -81,6 +81,17 @@
     return payload;
   }
 
+  async function listSlots(options) {
+    const config = {
+      handle: String(options && options.handle || "").trim(),
+      passphrase: String(options && options.passphrase || ""),
+      baseUrl: normalizeBaseUrl(options && options.baseUrl)
+    };
+    const payload = await postJson("/api/sync/list", config, config);
+    writeConfig(config);
+    return payload;
+  }
+
   async function pushSlot(slot, state) {
     const config = readConfig();
     return postJson("/api/sync/push", {
@@ -109,6 +120,7 @@
     readConfig,
     writeConfig,
     connect,
+    listSlots,
     pushSlot,
     pullSlot,
     disconnect
