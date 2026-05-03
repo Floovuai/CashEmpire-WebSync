@@ -176,6 +176,7 @@
     userMenuButton: q("#btn-user-menu"),
     userMenu: q("#user-menu"),
     saveNowButton: q("#btn-save-now"),
+    otaCheckButton: q("#btn-ota-check"),
     cloudConnectButton: q("#btn-cloud-connect"),
     cloudPushButton: q("#btn-cloud-push"),
     cloudPullButton: q("#btn-cloud-pull"),
@@ -216,6 +217,7 @@
     saveStatus: q("#save-status"),
     cloudStatus: q("#cloud-status"),
     cloudPassphraseStatus: q("#cloud-passphrase-status"),
+    otaStatus: q("#ota-status"),
     summaryDifficulty: q("#summary-difficulty"),
     summaryStartingCash: q("#summary-starting-cash"),
     summaryLastSave: q("#summary-last-save"),
@@ -787,14 +789,61 @@
     window.setTimeout(() => toast.remove(), 3200);
   }
 
+  function setOtaStatus(message, tone) {
+    if (!els.otaStatus) return;
+    els.otaStatus.textContent = `OTA: ${message || "sin revisar"}`;
+    if (tone) {
+      els.otaStatus.dataset.tone = tone;
+    } else {
+      delete els.otaStatus.dataset.tone;
+    }
+  }
+
   function handleOtaEvent(event) {
     const detail = event && event.detail ? event.detail : {};
     if (detail.status === "ready" && detail.version) {
+      setOtaStatus(`${detail.version} lista; reinicia la app`, "ready");
       showToast(`Actualizacion ${detail.version} lista para el proximo reinicio.`);
+    } else if (detail.status === "download-started") {
+      setOtaStatus(detail.version ? `descargando ${detail.version}` : "descargando");
     } else if (detail.status === "native-too-old") {
+      setOtaStatus("requiere instalar APK nuevo", "error");
       showToast("Hay una actualizacion que requiere instalar un APK nuevo.", "error");
+    } else if (detail.status === "up-to-date") {
+      setOtaStatus(detail.currentVersion ? `al dia (${detail.currentVersion})` : "al dia", "ready");
+    } else if (detail.status === "skipped") {
+      setOtaStatus(detail.reason || "no disponible");
+    } else if (detail.status === "manifest-ignored") {
+      setOtaStatus(detail.reason || "manifest ignorado", "error");
     } else if (detail.status === "failed") {
+      setOtaStatus(detail.message || "fallo al revisar", "error");
       console.warn("OTA fallida", detail.message || detail);
+    }
+  }
+
+  async function checkOtaNow() {
+    const ota = window.CashEmpireOta;
+    if (!ota || typeof ota.checkForUpdate !== "function") {
+      setOtaStatus("solo disponible en APK", "error");
+      showToast("OTA solo esta disponible en la APK instalada.", "error");
+      return;
+    }
+
+    if (els.otaCheckButton) els.otaCheckButton.disabled = true;
+    setOtaStatus("buscando actualizacion");
+    try {
+      const result = await ota.checkForUpdate({ force: true });
+      if (result && result.updated && result.version) {
+        setOtaStatus(`${result.version} lista; reinicia la app`, "ready");
+      } else if (result && result.skipped) {
+        setOtaStatus("no disponible en este runtime");
+      } else if (result && result.error) {
+        setOtaStatus("fallo al revisar", "error");
+      } else {
+        setOtaStatus("al dia", "ready");
+      }
+    } finally {
+      if (els.otaCheckButton) els.otaCheckButton.disabled = false;
     }
   }
 
@@ -5334,6 +5383,9 @@
       persist("Partida guardada.");
       closeUserMenu();
     });
+    if (els.otaCheckButton) {
+      els.otaCheckButton.addEventListener("click", checkOtaNow);
+    }
     if (els.cloudConnectButton) {
       els.cloudConnectButton.addEventListener("click", async () => {
         await connectCloudAccount();

@@ -745,7 +745,8 @@ input[aria-invalid="true"] {
 }
 
 #cloud-status,
-.cloud-secret {
+.cloud-secret,
+.ota-status {
   display: block;
   margin-top: 2px;
   color: var(--muted);
@@ -756,6 +757,19 @@ input[aria-invalid="true"] {
   color: var(--gold);
   font-family: var(--mono);
   overflow-wrap: anywhere;
+}
+
+.ota-status {
+  color: var(--cyan);
+  overflow-wrap: anywhere;
+}
+
+.ota-status[data-tone="error"] {
+  color: var(--red);
+}
+
+.ota-status[data-tone="ready"] {
+  color: var(--green);
 }
 
 .header-stats {
