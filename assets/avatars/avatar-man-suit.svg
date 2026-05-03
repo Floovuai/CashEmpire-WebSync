@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Avatar hombre con traje</title>
+  <desc id="desc">Retrato estilizado de usuario masculino con traje ejecutivo.</desc>
+  <defs>
+    <linearGradient id="bg" x1="18" y1="10" x2="108" y2="124" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17212b"/>
+      <stop offset="0.55" stop-color="#0b1218"/>
+      <stop offset="1" stop-color="#10180f"/>
+    </linearGradient>
+    <linearGradient id="suit" x1="30" y1="76" x2="102" y2="126" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d3140"/>
+      <stop offset="1" stop-color="#0d171f"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="47" y1="31" x2="79" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f5c9a8"/>
+      <stop offset="1" stop-color="#c88964"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="url(#bg)"/>
+  <circle cx="96" cy="22" r="18" fill="#2fffd1" opacity="0.12"/>
+  <path d="M16 104c14-18 32-28 48-28s34 10 48 28v24H16z" fill="url(#suit)"/>
+  <path d="M45 80l19 44 19-44c-5-4-11-6-19-6s-14 2-19 6z" fill="#edf5f1"/>
+  <path d="M59 84h10l4 38-9 6-9-6z" fill="#f4c44e"/>
+  <path d="M36 128l12-45 16 45zM92 128L80 83 64 128z" fill="#14232e"/>
+  <path d="M43 44c0-17 9-28 22-28 13 0 22 11 22 28v10c0 19-9 32-22 32S43 73 43 54z" fill="url(#skin)"/>
+  <path d="M40 47c1-21 12-34 30-34 11 0 20 7 24 18-9-2-17-7-25-14-9 10-19 13-29 30z" fill="#21150e"/>
+  <path d="M41 50c7-8 13-12 23-16 8-3 15-4 25-2-2-11-11-19-24-19-16 0-26 13-24 37z" fill="#2c1b11"/>
+  <path d="M54 57c3-3 7-3 10 0M72 57c3-3 7-3 10 0" fill="none" stroke="#42291d" stroke-width="3" stroke-linecap="round"/>
+  <path d="M59 70c4 3 9 3 13 0" fill="none" stroke="#6b3d2a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M42 78c8 10 14 14 22 14s14-4 22-14" fill="none" stroke="#f4c44e" stroke-opacity="0.26" stroke-width="2"/>
+  <rect x="7" y="7" width="114" height="114" rx="17" fill="none" stroke="#f4c44e" stroke-opacity="0.4" stroke-width="2"/>
+</svg>

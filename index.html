@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111310" />
+  <meta name="description" content="Cash Empire, simulador financiero y empresarial." />
+  <title>Cash Empire</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icons/favicon.ico" sizes="any" />
+  <link rel="icon" href="assets/icons/cash-empire-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="assets/icons/cash-empire-192.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <section id="screen-setup" class="screen screen-setup active" aria-labelledby="setup-title">
+    <main class="setup-shell">
+      <header class="brand-block">
+        <img class="brand-mark" src="assets/icons/cash-empire-512.png" alt="" width="72" height="72" />
+        <div>
+          <p class="eyebrow">Simulador financiero</p>
+          <h1 id="setup-title">Cash Empire</h1>
+          <p class="subtitle">Construye tu imperio con activos reales, empresas y decisiones operativas.</p>
+        </div>
+      </header>
+
+      <form id="setup-form" class="panel setup-panel" novalidate>
+        <div class="field">
+          <label for="player-name">Nombre del jugador</label>
+          <input id="player-name" name="playerName" type="text" maxlength="24" autocomplete="name" placeholder="Ej: Christian" />
+          <p class="field-error" id="name-error" aria-live="polite"></p>
+        </div>
+
+        <div class="field avatar-field">
+          <span class="label-text">Icono de usuario</span>
+          <div class="avatar-grid" role="radiogroup" aria-label="Icono de usuario">
+            <button type="button" class="avatar-option active" data-avatar-id="man-suit" role="radio" aria-checked="true">
+              <img src="assets/avatars/avatar-man-suit.svg" alt="" width="54" height="54" />
+              <span>
+                <strong>Hombre</strong>
+                <small>Traje ejecutivo</small>
+              </span>
+            </button>
+            <button type="button" class="avatar-option" data-avatar-id="woman-suit" role="radio" aria-checked="false">
+              <img src="assets/avatars/avatar-woman-suit.svg" alt="" width="54" height="54" />
+              <span>
+                <strong>Mujer</strong>
+                <small>Traje ejecutivo</small>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="initial-budget">Presupuesto inicial (USD)</label>
+          <input id="initial-budget" name="initialBudget" type="number" min="1000" step="1000" inputmode="numeric" placeholder="100000" />
+          <div class="preset-grid" aria-label="Presupuestos sugeridos">
+            <button type="button" data-budget="10000">$10k</button>
+            <button type="button" data-budget="100000">$100k</button>
+            <button type="button" data-budget="1000000">$1M</button>
+            <button type="button" data-budget="10000000">$10M</button>
+          </div>
+          <p class="field-error" id="budget-error" aria-live="polite"></p>
+        </div>
+
+        <div class="field">
+          <span class="label-text">Dificultad</span>
+          <div class="difficulty-grid" role="group" aria-label="Dificultad">
+            <button type="button" class="difficulty active" data-difficulty="facil">
+              <strong>Facil</strong>
+              <span>Menor volatilidad</span>
+            </button>
+            <button type="button" class="difficulty" data-difficulty="normal">
+              <strong>Normal</strong>
+              <span>Balanceado</span>
+            </button>
+            <button type="button" class="difficulty" data-difficulty="dificil">
+              <strong>Dificil</strong>
+              <span>Costos mas duros</span>
+            </button>
+            <button type="button" class="difficulty" data-difficulty="pesadilla">
+              <strong>Pesadilla</strong>
+              <span>Alta presion</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span class="label-text">Escenario</span>
+          <div class="scenario-grid" role="radiogroup" aria-label="Escenario inicial">
+            <button type="button" class="scenario-option active" data-scenario="free" role="radio" aria-checked="true">
+              <strong>Libre</strong>
+              <span>Economia base</span>
+            </button>
+            <button type="button" class="scenario-option" data-scenario="crisis" role="radio" aria-checked="false">
+              <strong>Crisis</strong>
+              <span>Tasas y liquidez</span>
+            </button>
+            <button type="button" class="scenario-option" data-scenario="ai_boom" role="radio" aria-checked="false">
+              <strong>IA</strong>
+              <span>Tech al alza</span>
+            </button>
+            <button type="button" class="scenario-option" data-scenario="oil_shock" role="radio" aria-checked="false">
+              <strong>Energia</strong>
+              <span>Inflacion y commodities</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="setup-actions">
+          <button class="btn btn-primary" type="submit">Comenzar imperio</button>
+          <div class="load-slot-wrap" id="load-slot-wrap" hidden>
+            <select id="load-slot" aria-label="Slot de guardado">
+              <option value="1">Slot 1</option>
+              <option value="2">Slot 2</option>
+              <option value="3">Slot 3</option>
+            </select>
+            <button class="btn btn-secondary" id="btn-load" type="button">Cargar partida</button>
+          </div>
+        </div>
+        <div class="cloud-entry">
+          <p class="cloud-entry-copy">Web y APK pueden compartir partida si ambos apuntan al mismo servidor de sincronizacion.</p>
+          <button class="btn btn-secondary" id="btn-load-cloud" type="button">Cargar desde nube</button>
+          <p class="field-error" id="cloud-setup-status" aria-live="polite"></p>
+        </div>
+      </form>
+    </main>
+  </section>
+
+  <section id="screen-game" class="screen screen-game" aria-labelledby="dashboard-title">
+    <header class="app-header">
+      <div class="header-player">
+        <button class="icon-button" id="btn-user-menu" type="button" aria-label="Abrir menu de usuario" aria-expanded="false">
+          <img id="hud-user-avatar" src="assets/avatars/avatar-man-suit.svg" alt="" width="48" height="48" />
+        </button>
+        <div class="player-identity">
+          <div class="player-title">
+            <strong id="hud-player-name">Jugador</strong>
+            <span id="hud-day" class="day-pill">Dia 1</span>
+          </div>
+          <div class="level-meter" aria-label="Progreso del jugador">
+            <div class="level-meter-head">
+              <span id="hud-level">Nivel 1</span>
+              <strong id="hud-rank">Aspirante</strong>
+            </div>
+            <div class="level-meter-meta">
+              <small id="hud-xp-label">0% XP</small>
+            </div>
+            <i aria-hidden="true"><b id="hud-xp-fill"></b></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-stats" aria-label="Estado financiero">
+        <div>
+          <span>Efectivo</span>
+          <strong id="hud-cash">$0</strong>
+        </div>
+        <div>
+          <span>Patrimonio</span>
+          <strong id="hud-net-worth">$0</strong>
+        </div>
+        <div>
+          <span>Cashflow op.</span>
+          <strong id="hud-cashflow">$0</strong>
+        </div>
+      </div>
+
+      <div class="chrono-panel" id="chrono-panel" aria-label="Crono del juego">
+        <div class="chrono-primary">
+          <span>Crono</span>
+          <strong id="chrono-time">00:00:00</strong>
+        </div>
+        <div class="chrono-detail">
+          <span id="chrono-date">Fecha inicial</span>
+          <strong id="chrono-cycle">Dia 1 / Mes 1 / Ano 1</strong>
+        </div>
+        <div class="chrono-track" aria-hidden="true">
+          <i id="chrono-progress"></i>
+        </div>
+        <div class="chrono-speed" aria-label="Velocidad visual del crono">
+          <button class="chrono-speed-button active" type="button" data-chrono-speed="0" aria-pressed="true">x0</button>
+          <button class="chrono-speed-button" type="button" data-chrono-speed="1" aria-pressed="false">x1</button>
+          <button class="chrono-speed-button" type="button" data-chrono-speed="2" aria-pressed="false">x2</button>
+          <button class="chrono-speed-button" type="button" data-chrono-speed="10" aria-pressed="false">x10</button>
+        </div>
+        <small id="chrono-status">Sincronizado al inicio</small>
+      </div>
+
+      <div class="time-actions">
+        <button class="btn btn-compact" type="button" data-advance="1">+1 dia</button>
+        <button class="btn btn-compact" type="button" data-advance="7">+7 dias</button>
+        <button class="btn btn-compact" type="button" data-advance="30">+30 dias</button>
+      </div>
+
+      <div class="message-hub">
+        <button class="message-button" id="btn-message-center" type="button" aria-label="Abrir mensajes del juego" aria-expanded="false">
+          <span class="message-icon" aria-hidden="true"></span>
+          <span>Mensajes</span>
+          <strong id="message-unread-count">0</strong>
+        </button>
+        <section class="message-center" id="message-center" aria-labelledby="message-center-title" hidden>
+          <div class="message-center-head">
+            <div>
+              <span>Centro de mando</span>
+              <h3 id="message-center-title">Mensajes</h3>
+            </div>
+            <div class="message-actions" aria-label="Acciones de mensajes">
+              <button class="btn btn-secondary btn-small" id="btn-message-mark-read" type="button">Leidos</button>
+              <button class="btn btn-secondary btn-small" id="btn-message-delete-read" type="button">Borrar leidos</button>
+            </div>
+          </div>
+          <div class="message-filter-bar" aria-label="Filtros de mensajes">
+            <button class="message-filter active" type="button" data-message-filter="all" aria-pressed="true">Todos</button>
+            <button class="message-filter" type="button" data-message-filter="business" aria-pressed="false">Empresas</button>
+            <button class="message-filter" type="button" data-message-filter="risk" aria-pressed="false">Riesgos</button>
+            <button class="message-filter" type="button" data-message-filter="opportunity" aria-pressed="false">Hitos</button>
+          </div>
+          <div class="message-list" id="message-list"></div>
+          <div class="empty-state message-empty" id="message-empty">Sin mensajes nuevos.</div>
+        </section>
+      </div>
+
+      <div class="macro-bar" aria-label="Indicadores macroeconomicos">
+        <div>
+          <span>Fase</span>
+          <strong id="macro-phase">Expansion</strong>
+        </div>
+        <div>
+          <span>Inflacion</span>
+          <strong id="macro-inflation">0.0%</strong>
+        </div>
+        <div>
+          <span>Tasa</span>
+          <strong id="macro-interest">0.0%</strong>
+        </div>
+        <div>
+          <span>PIB</span>
+          <strong id="macro-gdp">0.0%</strong>
+        </div>
+        <div>
+          <span>Sentimiento</span>
+          <strong id="macro-sentiment">Neutral</strong>
+        </div>
+        <div>
+          <span>Presion</span>
+          <strong id="macro-pressure">Balanceado</strong>
+        </div>
+      </div>
+
+      <div class="user-menu" id="user-menu" hidden>
+        <div class="user-menu-head">
+          <img id="menu-user-avatar" src="assets/avatars/avatar-man-suit.svg" alt="" width="42" height="42" />
+          <div>
+            <strong id="menu-player-name">Jugador</strong>
+            <span id="save-status">Guardado local activo</span>
+            <small id="cloud-status">Nube desconectada</small>
+          </div>
+        </div>
+        <button class="menu-item" id="btn-save-now" type="button">Guardar ahora</button>
+        <button class="menu-item" id="btn-cloud-connect" type="button">Conectar nube</button>
+        <button class="menu-item" id="btn-cloud-push" type="button">Subir slot actual</button>
+        <button class="menu-item" id="btn-cloud-pull" type="button">Traer slot actual</button>
+        <button class="menu-item" id="btn-cloud-disconnect" type="button">Desconectar nube</button>
+        <div class="menu-slot-grid" aria-label="Slots de guardado">
+          <button class="menu-item" data-save-slot="1" type="button">Guardar S1</button>
+          <button class="menu-item" data-save-slot="2" type="button">Guardar S2</button>
+          <button class="menu-item" data-save-slot="3" type="button">Guardar S3</button>
+        </div>
+        <button class="menu-item danger" id="btn-reset-game" type="button">Reiniciar partida</button>
+      </div>
+    </header>
+
+    <main class="game-layout">
+      <nav class="game-tabs" aria-label="Secciones del juego">
+        <button class="tab-button active" type="button" data-view="dashboard" aria-selected="true">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-secondary" d="M3.5 20.5h17" />
+              <path class="tab-icon-primary" d="M5.5 20.5v-9.4l4.8-3.7 4.7 3.7v9.4" />
+              <path class="tab-icon-accent" d="M15.8 20.5V5.6h3.6v14.9" />
+              <path class="tab-icon-detail" d="M8.4 12.2h.1M11.6 12.2h.1M17.6 8.4h.1M17.6 12.2h.1M17.6 16h.1" />
+            </svg>
+          </span>
+          <span>Ciudad</span>
+        </button>
+        <button class="tab-button" type="button" data-view="market" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-secondary" d="M4.5 5v14.5h15" />
+              <path class="tab-icon-primary" d="m6.8 15.4 3.7-3.8 3 2.1 4.8-6.5" />
+              <path class="tab-icon-accent" d="M16.2 7.2h2.1v2.1" />
+              <path class="tab-icon-detail" d="M8.2 18v-1.8M12 18v-3M15.8 18v-5" />
+            </svg>
+          </span>
+          <span>Mercado</span>
+        </button>
+        <button class="tab-button" type="button" data-view="realestate" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-primary" d="m4 11.2 8-6.2 8 6.2" />
+              <path class="tab-icon-secondary" d="M6.1 10.4v9.4h11.8v-9.4" />
+              <path class="tab-icon-accent" d="M10 19.8v-5h4v5" />
+              <path class="tab-icon-detail" d="M8.4 13h.1M15.5 13h.1M8.4 16.2h.1M15.5 16.2h.1" />
+            </svg>
+          </span>
+          <span>Bienes</span>
+        </button>
+        <button class="tab-button" type="button" data-view="business" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-secondary" d="M8 9V7.8A2.3 2.3 0 0 1 10.3 5h3.4A2.3 2.3 0 0 1 16 7.8V9" />
+              <path class="tab-icon-primary" d="M5.4 9.2h13.2a1.9 1.9 0 0 1 1.9 1.9v6.7a1.9 1.9 0 0 1-1.9 1.9H5.4a1.9 1.9 0 0 1-1.9-1.9v-6.7a1.9 1.9 0 0 1 1.9-1.9Z" />
+              <path class="tab-icon-accent" d="M3.8 13.3h16.4M10.1 13.3v2.1h3.8v-2.1" />
+            </svg>
+          </span>
+          <span>Empresas</span>
+        </button>
+        <button class="tab-button" type="button" data-view="bank" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-primary" d="m4 9 8-4.6L20 9" />
+              <path class="tab-icon-secondary" d="M5.4 10.1h13.2M5 18h14M4 20.4h16" />
+              <path class="tab-icon-accent" d="M7.3 10.1V18M12 10.1V18M16.7 10.1V18" />
+            </svg>
+          </span>
+          <span>Banco</span>
+        </button>
+        <button class="tab-button" type="button" data-view="news" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-primary" d="M5.4 6.1h10.9a2.3 2.3 0 0 1 2.3 2.3v8.5a2 2 0 0 0 2 2H7.3a1.9 1.9 0 0 1-1.9-1.9V6.1Z" />
+              <path class="tab-icon-secondary" d="M18.6 8.4v8.5" />
+              <path class="tab-icon-accent" d="M8.2 10.2h5.5M8.2 13.6h7.5M8.2 16.4h5.4" />
+            </svg>
+          </span>
+          <span>Noticias</span>
+        </button>
+        <button class="tab-button" type="button" data-view="progress" aria-selected="false">
+          <span class="tab-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path class="tab-icon-primary" d="M8 5.4h8v3.4a4 4 0 0 1-8 0V5.4Z" />
+              <path class="tab-icon-secondary" d="M8 7.4H5.2a2.8 2.8 0 0 0 2.8 4.2M16 7.4h2.8a2.8 2.8 0 0 1-2.8 4.2" />
+              <path class="tab-icon-accent" d="M12 12.8v3.7M9.2 20h5.6M10 16.5h4" />
+            </svg>
+          </span>
+          <span>Progreso</span>
+        </button>
+      </nav>
+      <p class="view-kicker"><span id="current-view-label">Dashboard</span> / Gestion del imperio</p>
+
+      <section class="panel hero-panel view-panel" data-view-panel="dashboard" aria-labelledby="dashboard-title">
+        <div>
+          <p class="eyebrow">Tycoon financiero</p>
+          <h2 id="dashboard-title">Ciudad del imperio</h2>
+          <p id="next-decision">La ciudad concentra progreso, riesgos y oportunidades reales del imperio.</p>
+        </div>
+        <div class="metric-strip">
+          <div>
+            <span>Dificultad</span>
+            <strong id="summary-difficulty">Normal</strong>
+          </div>
+          <div>
+            <span>Inicio</span>
+            <strong id="summary-starting-cash">$0</strong>
+          </div>
+          <div>
+            <span>Ultimo guardado</span>
+            <strong id="summary-last-save">Ahora</strong>
+          </div>
+          <div>
+            <span>Cashflow op. 30d</span>
+            <strong id="summary-cashflow">$0</strong>
+          </div>
+          <div>
+            <span>Alertas</span>
+            <strong id="summary-alerts">0</strong>
+          </div>
+          <div>
+            <span>Noticias</span>
+            <strong id="summary-news">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-grid" aria-label="Resumen del juego">
+        <article class="panel panel-wide empire-panel view-panel" data-view-panel="dashboard" id="empire-panel" aria-labelledby="empire-title">
+          <div class="empire-side">
+            <div class="panel-head">
+              <div>
+                <h3 id="empire-title">Mapa de ciudad</h3>
+                <p id="empire-caption">Tus edificios, distritos y contratos cambian con el progreso real del imperio.</p>
+              </div>
+              <strong id="empire-stage">Base</strong>
+            </div>
+            <div class="empire-scoreboard" aria-label="Progreso visual del imperio">
+              <div>
+                <span>Poder economico</span>
+                <strong id="empire-score">0/100</strong>
+              </div>
+              <div>
+                <span>Distritos</span>
+                <strong id="empire-district-count">0</strong>
+              </div>
+              <div>
+                <span>Proxima meta</span>
+                <strong id="empire-next-goal">$100k</strong>
+              </div>
+            </div>
+            <div class="empire-map-info" id="empire-skyline" aria-label="Indicadores del mapa"></div>
+            <div class="empire-districts empire-map-districts" id="empire-districts"></div>
+            <div class="empire-map-legend" aria-label="Leyenda del mapa">
+              <span><i class="legend-dot hq"></i>Mi ubicacion</span>
+              <span><i class="legend-dot owned"></i>Activos propios</span>
+              <span><i class="legend-dot sale"></i>En venta</span>
+            </div>
+          </div>
+          <div class="empire-visual empire-map-visual" id="empire-visual" aria-label="Mapa 3D interactivo del imperio">
+            <div class="empire-map-stage" id="empire-map-stage">
+              <canvas class="empire-map-canvas" id="empire-map-canvas" aria-hidden="true"></canvas>
+              <div class="empire-location-layer" id="empire-location-layer" aria-label="Locaciones de activos comprados"></div>
+              <section class="empire-location-popover" id="empire-location-popover" aria-live="polite" hidden></section>
+            </div>
+          </div>
+        </article>
+
+        <div class="dashboard-cluster dashboard-command-cluster view-panel" data-view-panel="dashboard" aria-label="Control, riesgo y decisiones">
+          <article class="panel panel-wide command-panel view-panel" data-view-panel="dashboard" aria-labelledby="command-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="command-title">Sala de control</h3>
+                <p id="command-summary">Rendimiento operativo, liquidez, cashflow operativo y riesgos.</p>
+              </div>
+              <strong id="command-net-change">0.0%</strong>
+            </div>
+            <div class="command-grid">
+              <div>
+                <span>Liquidez</span>
+                <strong id="command-liquidity">$0</strong>
+              </div>
+              <div>
+                <span>Empresas</span>
+                <strong id="command-businesses">$0</strong>
+              </div>
+              <div>
+                <span>Deuda</span>
+                <strong id="command-debt">$0</strong>
+              </div>
+              <div>
+                <span>Cashflow op. 30d</span>
+                <strong id="command-passive">$0</strong>
+              </div>
+            </div>
+            <div class="allocation-list" id="allocation-list"></div>
+            <canvas id="allocation-chart" class="allocation-chart" width="360" height="360" aria-label="Pie chart de asset allocation"></canvas>
+            <canvas id="net-worth-chart" class="market-chart" width="720" height="220" aria-label="Grafico historico del patrimonio neto"></canvas>
+            <div class="alert-list" id="alert-list"></div>
+          </article>
+
+          <article class="panel panel-wide strategy-panel view-panel" data-view-panel="dashboard" aria-labelledby="strategy-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="strategy-title">Radar estrategico</h3>
+                <p>Riesgo, diagnostico de caja, asesores y contratos semanales.</p>
+              </div>
+              <strong id="strategy-risk-score">0/100</strong>
+            </div>
+            <div class="strategy-grid">
+              <section class="risk-card" aria-label="Radar de riesgo">
+                <div class="risk-meter">
+                  <i id="risk-meter-fill"></i>
+                </div>
+                <strong id="strategy-risk-label">Controlado</strong>
+                <p id="cashflow-diagnosis">Sin datos de cashflow.</p>
+              </section>
+              <section class="advisor-list" id="advisor-list" aria-label="Asesores estrategicos"></section>
+              <section class="contract-list" id="contract-list" aria-label="Contratos semanales"></section>
+            </div>
+          </article>
+        </div>
+
+        <div class="dashboard-cluster dashboard-assets-cluster view-panel" data-view-panel="dashboard" aria-label="Activos, misiones y ejecucion">
+          <article class="panel panel-wide dashboard-portfolio-panel view-panel" data-view-panel="dashboard" id="dashboard-portfolio-panel" aria-labelledby="dashboard-portfolio-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="dashboard-portfolio-title">Activos comprados</h3>
+                <p>Portfolio por rubro con compra, venta, detalle y gestion directa.</p>
+              </div>
+              <strong id="dashboard-portfolio-total">$0</strong>
+            </div>
+            <div class="portfolio-summary dashboard-portfolio-summary" aria-label="Resumen de activos comprados">
+              <div>
+                <span>Valor</span>
+                <strong id="dashboard-portfolio-value">$0</strong>
+              </div>
+              <div>
+                <span>ROI</span>
+                <strong id="dashboard-portfolio-roi">0.0%</strong>
+              </div>
+              <div>
+                <span>Dia</span>
+                <strong id="dashboard-portfolio-day">0.0%</strong>
+              </div>
+              <div>
+                <span>Posiciones</span>
+                <strong id="dashboard-portfolio-count">0</strong>
+              </div>
+            </div>
+            <div class="dashboard-asset-tabs" id="dashboard-asset-tabs" role="tablist" aria-label="Rubros de activos comprados"></div>
+            <div class="dashboard-asset-list" id="dashboard-asset-list" aria-label="Activos comprados gestionables"></div>
+            <div class="empty-state" id="dashboard-portfolio-empty">Compra acciones u otros activos para gestionarlos desde el dashboard.</div>
+          </article>
+
+          <article class="panel onboarding-panel view-panel" data-view-panel="dashboard" id="onboarding-panel" aria-labelledby="onboarding-title">
+            <div class="panel-head">
+              <div>
+                <h3 id="onboarding-title">Contratos iniciales</h3>
+                <p>Primeros encargos para activar el loop de tycoon.</p>
+              </div>
+              <button class="btn btn-secondary btn-small" id="btn-skip-onboarding" type="button">Omitir</button>
+            </div>
+            <div class="mission-list" id="mission-list"></div>
+          </article>
+        </div>
+
+        <article class="panel panel-wide market-panel view-panel" data-view-panel="market" aria-labelledby="market-title" hidden>
+          <div class="panel-head">
+            <div>
+              <h3 id="market-title">Mercado simulado</h3>
+              <p id="market-source">Semilla documentada, precios simulados.</p>
+            </div>
+            <strong id="market-index">100.00</strong>
+          </div>
+
+          <div class="market-summary" aria-label="Resumen del mercado">
+            <div>
+              <span>Activos</span>
+              <strong id="market-count">0</strong>
+            </div>
+            <div>
+              <span>Promedio</span>
+              <strong id="market-average">0.0%</strong>
+            </div>
+            <div>
+              <span>Lider</span>
+              <strong id="market-top">-</strong>
+            </div>
+            <div>
+              <span>Volumen</span>
+              <strong id="market-volume">0</strong>
+            </div>
+          </div>
+
+          <div class="market-tools" aria-label="Filtros de mercado">
+            <input id="market-search" type="search" autocomplete="off" placeholder="Buscar activo, ticker o ciudad" />
+            <select id="market-category-filter" aria-label="Categoria de activo">
+              <option value="all">Todas</option>
+              <option value="stock">Acciones</option>
+              <option value="bond">Bonos</option>
+              <option value="real_estate">Bienes raices</option>
+              <option value="business">Empresas</option>
+              <option value="commodity">Commodities</option>
+              <option value="crypto">Crypto</option>
+              <option value="collectible">Coleccionables</option>
+            </select>
+          </div>
+
+          <section class="watchlist-panel" id="watchlist-panel" aria-label="Lista de vigilancia">
+            <div>
+              <strong>Vigilancia</strong>
+              <span>Compara oportunidades antes de comprar.</span>
+            </div>
+            <div class="watchlist-list" id="watchlist-list"></div>
+          </section>
+
+          <canvas id="market-chart" class="market-chart" width="720" height="220" aria-label="Grafico historico del indice de mercado"></canvas>
+          <p class="market-status" id="market-status"></p>
+          <div class="market-list" id="market-list" aria-label="Movimientos destacados"></div>
+        </article>
+
+        <article class="panel portfolio-panel view-panel" data-view-panel="market" hidden>
+          <h3>Portfolio</h3>
+          <div class="portfolio-summary" aria-label="Resumen de portfolio">
+            <div>
+              <span class="tip" data-tip="Valor actual de tus posiciones al precio simulado.">Valor</span>
+              <strong id="portfolio-value">$0</strong>
+            </div>
+            <div>
+              <span class="tip" data-tip="Retorno no realizado contra el costo promedio.">ROI</span>
+              <strong id="portfolio-roi">0.0%</strong>
+            </div>
+            <div>
+              <span>Posiciones</span>
+              <strong id="portfolio-count">0</strong>
+            </div>
+          </div>
+          <div class="portfolio-list" id="portfolio-list"></div>
+          <div class="performance-list" id="performance-list"></div>
+          <div class="empty-state" id="portfolio-empty">Sin inversiones todavia</div>
+        </article>
+
+        <article class="panel panel-wide business-panel view-panel" data-view-panel="business" aria-labelledby="business-title" hidden>
+          <div class="panel-head">
+            <div>
+              <h3 id="business-title">Empresas</h3>
+              <p><span class="tip" data-tip="P&L resume ingresos, costos, utilidad y flujo de caja del negocio.">P&L</span>, caja separada, inventario, empleados y unidades.</p>
+            </div>
+            <strong id="business-total">$0</strong>
+          </div>
+          <form class="inline-form" id="business-form" novalidate>
+            <input id="business-name" maxlength="32" placeholder="Nueva empresa" aria-label="Nombre de empresa" />
+            <select id="business-sector" aria-label="Sector de empresa">
+              <option value="food">Gastronomia</option>
+              <option value="retail">Retail</option>
+              <option value="services">Servicios</option>
+              <option value="logistics">Logistica</option>
+              <option value="software">Software</option>
+              <option value="hospitality">Hoteleria</option>
+            </select>
+            <input id="business-capital" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" min="5000" step="1000" placeholder="Capital" aria-label="Capital inicial" data-money-input="business-capital" />
+            <button class="btn btn-secondary" type="submit">Fundar</button>
+            <p class="amount-availability form-availability" id="business-capital-available" aria-live="polite"></p>
+          </form>
+          <p class="field-error" id="business-error" aria-live="polite"></p>
+          <div class="business-summary" id="business-summary"></div>
+          <div class="business-card-controls" aria-label="Controles de tarjetas de empresa">
+            <button class="btn btn-secondary btn-small" id="business-expand-all" type="button">Expandir todo</button>
+            <button class="btn btn-secondary btn-small" id="business-collapse-all" type="button">Contraer todo</button>
+          </div>
+          <div class="business-list" id="business-list"></div>
+          <div class="empty-state" id="business-empty">Sin empresas operadas</div>
+        </article>
+
+        <article class="panel panel-wide realestate-panel view-panel" data-view-panel="realestate" hidden>
+          <div class="panel-head">
+            <div>
+              <h3>Bienes productivos</h3>
+              <p>Propiedades de Colombia y plazas internacionales, hoteles, franquicias y adquisiciones operables.</p>
+            </div>
+            <strong id="goods-count">0</strong>
+          </div>
+
+          <section class="realestate-management" id="realestate-management" aria-labelledby="realestate-management-title">
+            <h3 class="section-title" id="realestate-management-title">Gestion interna</h3>
+            <div class="realestate-summary" id="realestate-summary"></div>
+            <div class="realestate-list" id="realestate-list"></div>
+            <div class="empty-state" id="realestate-empty">Sin propiedades compradas todavia</div>
+          </section>
+
+          <div class="goods-tools" aria-label="Filtros de bienes">
+            <input id="goods-search" type="search" autocomplete="off" placeholder="Buscar bien, ciudad, pais o ticker" />
+            <select id="goods-category-filter" aria-label="Tipo de bien">
+              <option value="all">Todos</option>
+              <option value="colombia">Colombia</option>
+              <option value="international">Otros paises</option>
+              <option value="real_estate">Propiedades</option>
+              <option value="hotel">Hoteles</option>
+              <option value="franchise">Franquicias</option>
+              <option value="acquisition">Adquisiciones</option>
+            </select>
+            <select id="goods-sort-filter" aria-label="Ordenar bienes">
+              <option value="price_desc">Precio mayor</option>
+              <option value="rent_desc">Renta mes mayor</option>
+              <option value="net_desc">Neto mes mayor</option>
+              <option value="yield_desc">Yield anual mayor</option>
+              <option value="liquidity_desc">Liquidez mayor</option>
+              <option value="risk_desc">Riesgo mayor</option>
+            </select>
+          </div>
+
+          <div class="goods-summary" id="goods-summary" aria-label="Yield promedio del catalogo de bienes"></div>
+          <div class="goods-list" id="goods-list" aria-label="Catalogo de bienes productivos"></div>
+          <div class="empty-state" id="goods-empty">Sin bienes para ese filtro</div>
+        </article>
+
+        <article class="panel bank-panel view-panel" data-view-panel="bank" hidden>
+          <h3>Banco e impuestos</h3>
+          <div class="bank-summary" id="bank-summary"></div>
+          <form class="inline-form compact-form" id="bank-form" novalidate>
+            <input id="bank-amount" type="number" min="500" step="500" placeholder="Monto" aria-label="Monto bancario" />
+            <select id="bank-business-target" aria-label="Empresa destino para credito empresarial">
+              <option value="">Empresa destino</option>
+            </select>
+            <button class="btn btn-secondary" data-bank-action="loan" type="button">Prestamo</button>
+            <button class="btn btn-secondary" data-bank-action="business_credit" type="button">Credito empresa</button>
+            <button class="btn btn-secondary" data-bank-action="deposit" type="button">Plazo fijo</button>
+            <p class="amount-availability form-availability bank-availability" id="bank-availability" aria-live="polite"></p>
+          </form>
+          <div class="tax-actions">
+            <button class="btn btn-secondary" id="tax-strategy" type="button">Plan fiscal: normal</button>
+          </div>
+          <section class="hedge-panel" aria-label="Coberturas defensivas">
+            <div>
+              <strong>Coberturas</strong>
+              <span>Seguros temporales contra shocks de mercado, tasas y operaciones.</span>
+            </div>
+            <div class="hedge-list" id="hedge-list"></div>
+          </section>
+          <div class="debt-list" id="debt-list"></div>
+        </article>
+
+        <article class="panel news-panel view-panel" data-view-panel="news" hidden>
+          <div class="panel-head">
+            <div>
+              <h3>Noticias</h3>
+              <p>Titulares relevantes para tus decisiones de mercado y negocios.</p>
+            </div>
+            <strong id="news-unread">0</strong>
+          </div>
+          <div class="news-list" id="news-list"></div>
+          <div class="empty-state" id="news-empty">Sin noticias todavia</div>
+        </article>
+
+        <article class="panel view-panel" data-view-panel="news" hidden>
+          <h3>Actividad</h3>
+          <ol class="activity-list" id="activity-list"></ol>
+        </article>
+
+        <article class="panel achievements-panel view-panel" data-view-panel="progress" hidden>
+          <div class="panel-head">
+            <div>
+              <h3>Logros</h3>
+              <p>Hitos de progreso del imperio.</p>
+            </div>
+            <strong id="achievement-count">0/0</strong>
+          </div>
+          <div class="achievement-list" id="achievement-list"></div>
+        </article>
+
+        <article class="panel panel-wide legacy-panel view-panel" data-view-panel="progress" hidden>
+          <div class="panel-head">
+            <div>
+              <h3>Legado y OPA</h3>
+              <p>Prestigio permanente, poder de ciudad y tomas corporativas suaves.</p>
+            </div>
+            <button class="btn btn-secondary btn-small" id="legacy-claim" type="button">Reclamar legado</button>
+          </div>
+          <div class="legacy-status" id="legacy-status"></div>
+          <div class="takeover-list" id="takeover-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <div class="news-ticker" aria-label="Ticker de noticias">
+      <span id="news-ticker-text">Sin titulares.</span>
+    </div>
+  </section>
+
+  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+
+  <div class="modal-backdrop guide-backdrop" id="welcome-guide" hidden>
+    <section class="modal guide-modal" role="dialog" aria-modal="true" aria-labelledby="welcome-guide-title">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Primer turno</p>
+          <h2 id="welcome-guide-title">Bienvenido a Cash Empire</h2>
+          <p>Empiezas con efectivo personal y el objetivo es convertirlo en patrimonio: compra activos, lee noticias, gestiona deuda y abre empresas con caja separada.</p>
+        </div>
+        <button class="icon-button modal-close" id="welcome-guide-close-x" type="button" aria-label="Cerrar guia">X</button>
+      </div>
+      <div class="guide-steps">
+        <div>
+          <strong>1</strong>
+          <span>Compra tu primer activo en Mercado o Bienes para activar ingresos y exposicion al mundo simulado.</span>
+        </div>
+        <div>
+          <strong>2</strong>
+          <span>Lee Noticias antes de avanzar tiempo: los eventos mueven precios, empresas, deuda y sentimiento.</span>
+        </div>
+        <div>
+          <strong>3</strong>
+          <span>Completa contratos iniciales. Las bonificaciones van a tu efectivo personal, nunca a la caja de empresas.</span>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="welcome-guide-close" type="button">Comenzar</button>
+    </section>
+  </div>
+
+  <div class="modal-backdrop turn-summary-backdrop" id="turn-summary" hidden>
+    <section class="turn-summary" role="dialog" aria-modal="true" aria-labelledby="turn-title">
+      <div class="turn-head">
+        <div>
+          <p class="eyebrow" id="turn-range">Turno cerrado</p>
+          <h2 id="turn-title">Resumen del imperio</h2>
+        </div>
+        <button class="icon-button modal-close" id="turn-close" type="button" aria-label="Cerrar resumen">X</button>
+      </div>
+      <div class="turn-metrics">
+        <div>
+          <span>Patrimonio</span>
+          <strong id="turn-net">$0</strong>
+        </div>
+        <div>
+          <span>Efectivo</span>
+          <strong id="turn-cash">$0</strong>
+        </div>
+        <div>
+          <span>Cashflow op.</span>
+          <strong id="turn-income">$0</strong>
+        </div>
+        <div>
+          <span>Eventos</span>
+          <strong id="turn-events">0</strong>
+        </div>
+      </div>
+      <ol class="turn-highlights" id="turn-highlights"></ol>
+      <button class="btn btn-primary" id="turn-continue" type="button">Continuar</button>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="asset-detail-modal" hidden>
+    <section class="modal asset-detail-modal" role="dialog" aria-modal="true" aria-labelledby="asset-detail-title">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow" id="asset-detail-kicker">Detalle</p>
+          <h2 id="asset-detail-title">Activo</h2>
+          <p id="asset-detail-subtitle">Precio simulado y posicion.</p>
+        </div>
+        <button class="icon-button modal-close" id="asset-detail-close" type="button" aria-label="Cerrar detalle">X</button>
+      </div>
+      <div class="asset-detail-grid" id="asset-detail-metrics"></div>
+      <canvas id="asset-detail-chart" class="market-chart" width="720" height="220" aria-label="Grafico historico del activo"></canvas>
+      <div class="asset-detail-position" id="asset-detail-position"></div>
+      <div class="setup-actions">
+        <button class="btn btn-primary" id="asset-detail-buy" type="button">Comprar</button>
+        <button class="btn btn-secondary" id="asset-detail-sell" type="button">Vender</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="trade-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="trade-title">
+      <form id="trade-form" novalidate>
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow" id="trade-mode">Operacion</p>
+            <h2 id="trade-title">Comprar activo</h2>
+            <p id="trade-subtitle">Selecciona cantidad y confirma.</p>
+          </div>
+          <button class="icon-button modal-close" id="trade-close" type="button" aria-label="Cerrar modal">X</button>
+        </div>
+
+        <div class="trade-grid">
+          <div>
+            <span>Precio estimado</span>
+            <strong id="trade-price">$0</strong>
+          </div>
+          <div>
+            <span id="trade-owned-label">Tenencia</span>
+            <strong id="trade-owned">0</strong>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="trade-quantity">Cantidad</label>
+          <input id="trade-quantity" type="number" min="0" step="0.01" inputmode="decimal" />
+          <p class="amount-availability trade-availability" id="trade-available" aria-live="polite"></p>
+          <p class="field-error" id="trade-error" aria-live="polite"></p>
+        </div>
+
+        <div class="trade-estimate" aria-label="Estimacion de operacion">
+          <div>
+            <span>Bruto</span>
+            <strong id="trade-gross">$0</strong>
+          </div>
+          <div>
+            <span>Comision</span>
+            <strong id="trade-fees">$0</strong>
+          </div>
+          <div>
+            <span>Impuestos</span>
+            <strong id="trade-taxes">$0</strong>
+          </div>
+          <div>
+            <span>Total</span>
+            <strong id="trade-total">$0</strong>
+          </div>
+        </div>
+
+        <div class="trade-impact" id="trade-impact"></div>
+
+        <div class="setup-actions">
+          <button class="btn btn-primary" id="trade-confirm" type="submit">Confirmar</button>
+          <button class="btn btn-secondary" id="trade-cancel" type="button">Cancelar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/economy.js"></script>
+  <script src="js/market.js"></script>
+  <script src="js/taxes.js"></script>
+  <script src="js/strategy.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/events.js"></script>
+  <script src="js/businesses.js"></script>
+  <script src="js/bank.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/cloud-sync.js"></script>
+  <script src="js/ota-config.js"></script>
+  <script src="js/ota-updater.js"></script>
+  <script src="js/vendor/three.min.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

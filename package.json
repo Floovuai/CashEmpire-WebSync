@@ -1,0 +1,42 @@
+{
+  "name": "cash-empire-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cash Empire mobile/desktop app source.",
+  "scripts": {
+    "start": "npx serve .",
+    "start:sync": "node server/server.js",
+    "smoke:epic01": "node scripts/smoke-epic01.js",
+    "smoke:epic02": "node scripts/smoke-epic02.js",
+    "smoke:epic03": "node scripts/smoke-epic03.js",
+    "smoke:epic04": "node scripts/smoke-epic04.js",
+    "smoke:epic05": "node scripts/smoke-epic05.js",
+    "smoke:epic06-15": "node scripts/smoke-epic06-15.js",
+    "smoke:epic16": "node scripts/smoke-epic16.js",
+    "balance:365": "node scripts/balance-365.js",
+    "balance:long": "node scripts/balance-long.js",
+    "assets:generate": "node scripts/generate-assets.js",
+    "export:www": "node scripts/export-www.js",
+    "sync:webrepo": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-web-repo.ps1",
+    "publish:webrepo": "npm run export:www && npm run sync:webrepo",
+    "prod:check": "npm test && npm run balance:365 && npm run assets:generate && npm run export:www && npx cap sync android && node scripts/production-check.js",
+    "visual:check": "node scripts/visual-check.js",
+    "visual:check:strict": "node scripts/visual-check.js --strict-launch",
+    "test:full": "npm test && npm run balance:365 && npm run visual:check",
+    "test": "npm run smoke:epic01 && npm run smoke:epic02 && npm run smoke:epic03 && npm run smoke:epic04 && npm run smoke:epic05 && npm run smoke:epic06-15 && npm run smoke:epic16",
+    "cap:init": "npx cap init CashEmpire com.cashempire.game --web-dir www",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npm run assets:generate && npm run export:www && npx cap sync android",
+    "android:build:debug": "npm run cap:sync && node scripts/build-android.js debug",
+    "android:build:release": "npm run cap:sync && node scripts/build-android.js release",
+    "cap:open:android": "npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "playwright": "^1.59.1",
+    "serve": "^14.2.4",
+    "three": "^0.149.0"
+  }
+}

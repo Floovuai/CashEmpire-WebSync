@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Cash Empire</title>
+  <desc id="desc">Gold CE monogram over a dark financial chart.</desc>
+  <rect width="256" height="256" rx="42" fill="#111310"/>
+  <path d="M45 170h166" stroke="#3b4135" stroke-width="10" stroke-linecap="round"/>
+  <path d="M55 151l35-33 31 22 42-58 38 28" fill="none" stroke="#2fc77b" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="128" r="76" fill="#d4af37"/>
+  <circle cx="128" cy="128" r="62" fill="#1a1d18"/>
+  <path d="M112 91c-28 0-47 16-47 38s19 38 47 38h12v-24h-12c-12 0-20-5-20-14s8-14 20-14h18V91h-18zm32 0v76h49v-24h-22v-5h18v-22h-18v-3h22V91h-49z" fill="#d4af37"/>
+</svg>

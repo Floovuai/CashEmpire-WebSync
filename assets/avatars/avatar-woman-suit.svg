@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Avatar mujer con traje</title>
+  <desc id="desc">Retrato estilizado de usuaria femenina con traje ejecutivo.</desc>
+  <defs>
+    <linearGradient id="bg" x1="20" y1="9" x2="112" y2="126" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#191f2d"/>
+      <stop offset="0.55" stop-color="#0a1218"/>
+      <stop offset="1" stop-color="#10170f"/>
+    </linearGradient>
+    <linearGradient id="suit" x1="29" y1="76" x2="102" y2="127" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#243548"/>
+      <stop offset="1" stop-color="#111820"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="47" y1="31" x2="78" y2="76" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6cdb2"/>
+      <stop offset="1" stop-color="#c98768"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="url(#bg)"/>
+  <circle cx="98" cy="23" r="18" fill="#68a7ff" opacity="0.13"/>
+  <path d="M27 128V91c0-25 15-42 37-42s37 17 37 42v37z" fill="#2a1712"/>
+  <path d="M17 105c14-19 31-29 47-29s33 10 47 29v23H17z" fill="url(#suit)"/>
+  <path d="M45 80l19 44 19-44c-5-4-11-6-19-6s-14 2-19 6z" fill="#edf5f1"/>
+  <path d="M59 84h10l3 34-8 10-8-10z" fill="#2fffd1"/>
+  <path d="M36 128l12-45 16 45zM92 128L80 83 64 128z" fill="#162331"/>
+  <path d="M42 45c0-18 9-30 22-30 14 0 23 12 23 30v10c0 19-9 31-23 31-13 0-22-12-22-31z" fill="url(#skin)"/>
+  <path d="M37 55c4-28 16-43 33-43 12 0 21 8 25 22-12-3-22-9-29-18-7 11-17 18-29 39z" fill="#3a2116"/>
+  <path d="M38 63c2-16 11-29 28-40 8 7 16 11 27 13-1 25-10 39-24 44 8-10 12-24 10-42-8-1-15-5-21-10-9 8-15 19-20 35z" fill="#24140e"/>
+  <path d="M53 58c3-3 7-3 10 0M72 58c3-3 7-3 10 0" fill="none" stroke="#44291e" stroke-width="3" stroke-linecap="round"/>
+  <path d="M58 70c4 3 9 3 13 0" fill="none" stroke="#6b3d2a" stroke-width="3" stroke-linecap="round"/>
+  <path d="M42 78c8 10 14 14 22 14s14-4 22-14" fill="none" stroke="#2fffd1" stroke-opacity="0.22" stroke-width="2"/>
+  <rect x="7" y="7" width="114" height="114" rx="17" fill="none" stroke="#f4c44e" stroke-opacity="0.4" stroke-width="2"/>
+</svg>

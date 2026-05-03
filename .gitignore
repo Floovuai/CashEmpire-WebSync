@@ -1,0 +1,10 @@
+# Local noise only. Public web files live at repo root.
+.DS_Store
+Thumbs.db
+desktop.ini
+client/
+node_modules/
+server/data/*.json
+!server/data/.gitkeep
+zzz-test/
+capacitor.config.json
