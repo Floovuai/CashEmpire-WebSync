@@ -215,6 +215,7 @@
     menuPlayerName: q("#menu-player-name"),
     saveStatus: q("#save-status"),
     cloudStatus: q("#cloud-status"),
+    cloudPassphraseStatus: q("#cloud-passphrase-status"),
     summaryDifficulty: q("#summary-difficulty"),
     summaryStartingCash: q("#summary-starting-cash"),
     summaryLastSave: q("#summary-last-save"),
@@ -4255,6 +4256,11 @@
       els.cloudStatus.textContent = config
         ? `Nube conectada: ${config.handle}`
         : "Nube desconectada";
+    }
+    if (els.cloudPassphraseStatus) {
+      els.cloudPassphraseStatus.textContent = config && config.passphrase
+        ? `Clave sync: ${config.passphrase}`
+        : "Clave sync: no guardada";
     }
     if (typeof message === "string" && els.cloudSetupStatus) {
       els.cloudSetupStatus.textContent = message;

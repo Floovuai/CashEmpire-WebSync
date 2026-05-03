@@ -744,11 +744,18 @@ input[aria-invalid="true"] {
   height: 42px;
 }
 
-#cloud-status {
+#cloud-status,
+.cloud-secret {
   display: block;
   margin-top: 2px;
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.cloud-secret {
+  color: var(--gold);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
 }
 
 .header-stats {
