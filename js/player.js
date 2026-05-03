@@ -27,6 +27,39 @@
     Hotel: { occupancy: 0.68, serviceLevel: 0.76, rentIndex: 1, costLoad: 1.42 }
   };
 
+  const PROPERTY_BUYER_PROFILES = [
+    {
+      id: "family_office",
+      name: "Family office local",
+      label: "Compra patrimonial",
+      basePremium: 0.018,
+      volatility: 0.028,
+      yieldWeight: 0.55,
+      qualityWeight: 0.85,
+      preferredKinds: ["Residencial", "Oficina"]
+    },
+    {
+      id: "operator_group",
+      name: "Operador especializado",
+      label: "Busca flujo operativo",
+      basePremium: 0.006,
+      volatility: 0.04,
+      yieldWeight: 1.2,
+      qualityWeight: 0.5,
+      preferredKinds: ["Hotel", "Comercial"]
+    },
+    {
+      id: "opportunity_fund",
+      name: "Fondo oportunista",
+      label: "Cierre rapido",
+      basePremium: -0.035,
+      volatility: 0.075,
+      yieldWeight: 0.35,
+      qualityWeight: 0.25,
+      preferredKinds: []
+    }
+  ];
+
   function isObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
   }
@@ -297,6 +330,72 @@
     return source.map(normalizeCashflowEntry).filter(Boolean).slice(-240);
   }
 
+  function reconcileRealEstatePortfolio(portfolio, transactions, assets) {
+    const positions = normalizePortfolio(portfolio);
+    const list = normalizeTransactions(transactions);
+    if (!assets || !list.length) return positions;
+
+    const rebuiltByAsset = new Map();
+    list.forEach((transaction) => {
+      const asset = assets[transaction.assetId];
+      if (!asset || asset.type !== "real_estate") return;
+
+      const quantity = roundQuantity(Math.max(0, Number(transaction.quantity) || 0));
+      if (quantity <= 0) return;
+
+      const current = rebuiltByAsset.get(transaction.assetId) || {
+        assetId: transaction.assetId,
+        quantity: 0,
+        totalCost: 0,
+        acquiredDay: transaction.day,
+        realizedGain: 0
+      };
+
+      if (transaction.type === "buy") {
+        current.quantity = roundQuantity(current.quantity + quantity);
+        current.totalCost = roundMoney(current.totalCost + (Number(transaction.total) || Number(transaction.gross) || 0));
+        current.acquiredDay = Math.min(current.acquiredDay, transaction.day);
+      } else if (current.quantity > 0) {
+        const soldQuantity = Math.min(quantity, current.quantity);
+        const averageCost = current.quantity > 0 ? current.totalCost / current.quantity : 0;
+        current.quantity = roundQuantity(current.quantity - soldQuantity);
+        current.totalCost = current.quantity > 0 ? roundMoney(current.totalCost - averageCost * soldQuantity) : 0;
+        current.realizedGain = roundMoney(current.realizedGain + (Number(transaction.realizedGain) || 0));
+      }
+
+      rebuiltByAsset.set(transaction.assetId, current);
+    });
+
+    rebuiltByAsset.forEach((rebuilt) => {
+      if (rebuilt.quantity <= 0) return;
+
+      const index = positions.findIndex((position) => position.assetId === rebuilt.assetId);
+      if (index < 0) {
+        positions.push({
+          ...rebuilt,
+          averageCost: roundMoney(rebuilt.totalCost / rebuilt.quantity)
+        });
+        return;
+      }
+
+      const existing = positions[index];
+      if (rebuilt.quantity <= existing.quantity + 0.000001) return;
+
+      const missingQuantity = roundQuantity(rebuilt.quantity - existing.quantity);
+      const rebuiltAverageCost = rebuilt.quantity > 0 ? rebuilt.totalCost / rebuilt.quantity : 0;
+      const totalCost = roundMoney(existing.totalCost + rebuiltAverageCost * missingQuantity);
+      positions[index] = {
+        ...existing,
+        quantity: rebuilt.quantity,
+        totalCost,
+        averageCost: roundMoney(totalCost / rebuilt.quantity),
+        acquiredDay: Math.min(existing.acquiredDay || rebuilt.acquiredDay, rebuilt.acquiredDay)
+      };
+    });
+
+    return normalizePortfolio(positions);
+  }
+
   function appendCashflow(state, entry) {
     const cashflow = normalizeCashflowEntry({
       ...entry,
@@ -478,6 +577,119 @@
     };
   }
 
+  function seededUnit(seed) {
+    const text = String(seed || "");
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) / 4294967295;
+  }
+
+  function getMacroSalePremium(state) {
+    const macro = state && state.macro ? state.macro : {};
+    const phase = macro.phase || "expansion";
+    const phasePremium = {
+      expansion: 0.018,
+      peak: 0.008,
+      recession: -0.045,
+      recovery: 0.014
+    }[phase] || 0;
+    const sentimentPremium = clamp(Number(macro.sentiment) || 0, -0.6, 0.6) * 0.045;
+    const rateDiscount = Math.max(0, (Number(macro.interestRate) || 0.04) - 0.055) * 0.9;
+    return phasePremium + sentimentPremium - rateDiscount;
+  }
+
+  function getCollateralDebtTotal(state, assetId) {
+    return (Array.isArray(state.debts) ? state.debts : [])
+      .filter((debt) => debt && debt.collateralAssetId === assetId)
+      .reduce((sum, debt) => roundMoney(sum + Math.max(0, Number(debt.balance) || 0)), 0);
+  }
+
+  function createPropertySaleEstimate(state, position, buyer, offerFactor) {
+    const asset = position.asset;
+    const quantity = position.quantity;
+    const unitPrice = roundMoney(asset.simPrice * offerFactor);
+    const gross = roundMoney(unitPrice * quantity);
+    const commissionRate = getCommissionRate(asset.type);
+    const fees = roundMoney(gross * commissionRate);
+    const costBasis = roundMoney(position.averageCost * quantity);
+    const realizedGain = roundMoney(gross - fees - costBasis);
+    const taxes = roundMoney(Math.max(0, realizedGain) * TAX_RATE_REALIZED_GAIN * getTaxMultiplier(state));
+    const beforeDebt = roundMoney(gross - fees - taxes);
+    const mortgagePayoff = getCollateralDebtTotal(state, asset.id);
+    const netProceeds = roundMoney(Math.max(0, beforeDebt - mortgagePayoff));
+    const debtShortfall = roundMoney(Math.max(0, mortgagePayoff - beforeDebt));
+
+    return {
+      ok: true,
+      side: "sell",
+      asset,
+      position,
+      quantity,
+      unitPrice,
+      gross,
+      fees,
+      taxes,
+      total: netProceeds,
+      beforeDebt,
+      mortgagePayoff,
+      debtShortfall,
+      slippage: Math.max(0, offerFactor - 1),
+      realizedGain,
+      costBasis,
+      commissionRate,
+      buyerId: buyer.id,
+      buyerName: buyer.name,
+      buyerLabel: buyer.label
+    };
+  }
+
+  function getRealEstateSaleOffers(state, assetId) {
+    ensureStateBranches(state);
+    const position = getDecoratedPositions(state.portfolio, state.assets).find((item) => item.assetId === assetId) || null;
+
+    if (!position || !position.asset || position.asset.type !== "real_estate") return [];
+
+    const metrics = calculateRealEstateMonth(state, position, { applyTax: false });
+    const op = metrics.operation;
+    const asset = position.asset;
+    const yieldAnnual = position.value > 0 ? metrics.net * 12 / position.value : 0;
+    const yieldSignal = clamp(yieldAnnual - 0.055, -0.07, 0.09);
+    const qualitySignal = clamp(
+      (op.condition - 0.82) * 0.11 +
+      (op.serviceLevel - getPropertyDefaults(asset).serviceLevel) * 0.07 +
+      (metrics.occupancy - 0.78) * 0.08,
+      -0.08,
+      0.1
+    );
+    const liquidityDiscount = clamp((0.24 - (Number(asset.liquidity) || 0.16)) * 0.18, -0.02, 0.045);
+    const macroPremium = getMacroSalePremium(state);
+    const seedBase = `${state.time && state.time.day ? state.time.day : 1}:${assetId}:${Math.round(position.value)}`;
+
+    return PROPERTY_BUYER_PROFILES.map((buyer) => {
+      const preference = buyer.preferredKinds.includes(asset.propertyKind) ? 0.025 : 0;
+      const noise = (seededUnit(`${seedBase}:${buyer.id}`) - 0.5) * buyer.volatility;
+      const factor = clamp(
+        1 + buyer.basePremium + preference + macroPremium - liquidityDiscount +
+        yieldSignal * buyer.yieldWeight +
+        qualitySignal * buyer.qualityWeight +
+        noise,
+        0.82,
+        1.22
+      );
+      const estimate = createPropertySaleEstimate(state, position, buyer, factor);
+      return {
+        id: buyer.id,
+        buyerName: buyer.name,
+        buyerLabel: buyer.label,
+        premium: roundMoney(factor - 1),
+        ...estimate
+      };
+    }).sort((a, b) => b.total - a.total || b.gross - a.gross);
+  }
+
   function getRealEstateSummary(state) {
     ensureAssetOperations(state);
     const positions = getDecoratedPositions(state.portfolio, state.assets).filter((position) => position.asset.type === "real_estate");
@@ -509,6 +721,7 @@
   function ensureStateBranches(state) {
     state.portfolio = normalizePortfolio(state.portfolio);
     state.transactions = normalizeTransactions(state.transactions);
+    state.portfolio = reconcileRealEstatePortfolio(state.portfolio, state.transactions, state.assets);
     state.taxes = normalizeTaxes(state.taxes);
     state.cashflows = normalizeCashflows(state.cashflows);
     ensureAssetOperations(state);
@@ -632,6 +845,95 @@
       message: `Vendiste ${estimate.quantity} de ${estimate.asset.ticker || estimate.asset.name}.`,
       transaction,
       estimate
+    };
+  }
+
+  function settleCollateralDebts(state, assetId, availableCash) {
+    let remainingCash = roundMoney(Math.max(0, Number(availableCash) || 0));
+    let paid = 0;
+    let shortfall = 0;
+    const nextDebts = [];
+
+    (Array.isArray(state.debts) ? state.debts : []).forEach((debt) => {
+      if (!debt || debt.collateralAssetId !== assetId) {
+        nextDebts.push(debt);
+        return;
+      }
+
+      const balance = roundMoney(Math.max(0, Number(debt.balance) || 0));
+      const payment = Math.min(balance, remainingCash);
+      remainingCash = roundMoney(remainingCash - payment);
+      paid = roundMoney(paid + payment);
+
+      const residual = roundMoney(balance - payment);
+      if (residual > 0) {
+        shortfall = roundMoney(shortfall + residual);
+        nextDebts.push({
+          ...debt,
+          type: "personal",
+          label: `Saldo remanente ${debt.label || "hipoteca"}`,
+          balance: residual,
+          principal: residual,
+          collateralAssetId: null
+        });
+      }
+    });
+
+    state.debts = nextDebts;
+    return {
+      cashAfterPayoff: remainingCash,
+      paid,
+      shortfall
+    };
+  }
+
+  function sellRealEstateToBuyer(state, assetId, buyerId) {
+    ensureStateBranches(state);
+    const offers = getRealEstateSaleOffers(state, assetId);
+    const offer = offers.find((item) => item.id === buyerId) || null;
+    if (!offer) {
+      return { ok: false, message: "Oferta inmobiliaria no disponible." };
+    }
+
+    const existing = offer.position;
+    upsertPosition(state, {
+      ...existing,
+      quantity: 0,
+      totalCost: 0,
+      realizedGain: roundMoney(existing.realizedGain + offer.realizedGain)
+    });
+
+    const settlement = settleCollateralDebts(state, assetId, offer.beforeDebt);
+    state.player.cash = roundMoney(state.player.cash + settlement.cashAfterPayoff);
+    state.taxes.realizedGains = roundMoney(state.taxes.realizedGains + offer.realizedGain);
+    state.taxes.transactionFees = roundMoney(state.taxes.transactionFees + offer.fees);
+    state.taxes.taxesPaid = roundMoney(state.taxes.taxesPaid + offer.taxes);
+    const transaction = appendTransaction(state, {
+      ...offer,
+      total: settlement.cashAfterPayoff
+    });
+    appendCashflow(state, {
+      type: "property_sale",
+      assetId,
+      label: `Venta inmueble ${offer.asset.ticker || offer.asset.name}`,
+      amount: settlement.cashAfterPayoff,
+      gross: offer.gross,
+      taxes: offer.taxes,
+      fees: offer.fees,
+      channel: "investing"
+    });
+    recalculateState(state);
+
+    return {
+      ok: true,
+      message: `Vendiste ${offer.asset.name} a ${offer.buyerName}.`,
+      transaction,
+      estimate: {
+        ...offer,
+        total: settlement.cashAfterPayoff,
+        mortgagePayoff: settlement.paid,
+        debtShortfall: settlement.shortfall
+      }
     };
   }
 
@@ -946,6 +1248,7 @@
     normalizeTransactions,
     normalizeTaxes,
     normalizeCashflows,
+    reconcileRealEstatePortfolio,
     summarizeCashflows,
     normalizeAssetOperations,
     findPosition,
@@ -954,6 +1257,8 @@
     estimateTrade,
     buyAsset,
     sellAsset,
+    getRealEstateSaleOffers,
+    sellRealEstateToBuyer,
     processPassiveIncome,
     getRealEstateSummary,
     calculateRealEstateMonth,

@@ -43,8 +43,6 @@
   const empireLocationPinElements = new Map();
   const empireLocationProjectionMap = new Map();
   const empireLocationDataMap = new Map();
-  let cloudRemoteSlots = [];
-
   const ONBOARDING_REWARDS = {
     firstBuy: { cash: 500, tier: "Basica", label: "+$500 jugador" },
     news: { cash: 750, tier: "Basica", label: "+$750 jugador" },
@@ -71,6 +69,14 @@
     bank: "Banco",
     news: "Noticias",
     progress: "Progreso"
+  };
+
+  const MONTHLY_BUSINESS_ACTION_LABELS = {
+    contribute: "Aporte mensual",
+    inventory: "Insumos mensuales",
+    marketing: "Marketing mensual",
+    rnd: "I+D mensual",
+    supplier_credit: "Credito proveedor mensual"
   };
 
   const ASSET_CATEGORY_LABELS = {
@@ -159,16 +165,8 @@
     nameError: q("#name-error"),
     budgetError: q("#budget-error"),
     loadButton: q("#btn-load"),
-    loadCloudButton: q("#btn-load-cloud"),
     loadSlotWrap: q("#load-slot-wrap"),
     loadSlot: q("#load-slot"),
-    cloudLoadSlot: q("#cloud-load-slot"),
-    cloudSlotWrap: q(".cloud-slot-wrap"),
-    cloudHandle: q("#cloud-handle"),
-    cloudPassphrase: q("#cloud-passphrase"),
-    cloudBaseUrl: q("#cloud-base-url"),
-    cloudCheckButton: q("#btn-cloud-check"),
-    cloudSetupStatus: q("#cloud-setup-status"),
     avatarButtons: document.querySelectorAll("[data-avatar-id]"),
     difficultyButtons: document.querySelectorAll(".difficulty"),
     scenarioButtons: document.querySelectorAll("[data-scenario]"),
@@ -1106,8 +1104,6 @@
       els.loadButton.disabled = isBusy;
       els.loadSlot.disabled = isBusy;
     }
-    if (els.loadCloudButton) els.loadCloudButton.disabled = isBusy || cloudRemoteSlots.length === 0;
-    if (els.cloudLoadSlot) els.cloudLoadSlot.disabled = isBusy || cloudRemoteSlots.length === 0;
   }
 
   function prefersReducedMotion() {
@@ -3092,7 +3088,11 @@
         behavior: prefersReducedMotion() ? "auto" : "smooth"
       });
     }
-    if (touchViewport && !options.allowTouchFocus) return;
+    if (touchViewport) {
+      if (!options.allowTouchFocus) return;
+      input.focus({ preventScroll: true });
+      return;
+    }
     input.focus({ preventScroll: true });
     const canSelect = supportsTextSelection(input);
     if (!touchViewport && canSelect && typeof input.select === "function" && input.value) {
@@ -3214,6 +3214,35 @@
     };
 
     return configs[action] || null;
+  }
+
+  function getBusinessMonthlyPlan(business, action) {
+    const plans = business && business.monthlyInjections && typeof business.monthlyInjections === "object"
+      ? business.monthlyInjections
+      : {};
+    const plan = plans[action] && typeof plans[action] === "object" ? plans[action] : {};
+    const amount = getAmountLimit(plan.amount);
+
+    return {
+      active: Boolean(plan.active) && amount > 0,
+      amount,
+      label: MONTHLY_BUSINESS_ACTION_LABELS[action] || "Plan mensual",
+      lastOk: Object.prototype.hasOwnProperty.call(plan, "lastOk") ? Boolean(plan.lastOk) : true,
+      lastMessage: typeof plan.lastMessage === "string" ? plan.lastMessage : ""
+    };
+  }
+
+  function getMonthlyPlanStatusHtml(plan) {
+    if (!plan || !plan.active) {
+      return `<p class="amount-availability monthly-injection-status"><span>Mensual</span><strong>Sin programar</strong></p>`;
+    }
+
+    return `
+      <p class="amount-availability monthly-injection-status ${plan.lastOk ? "is-active" : "is-warning"}">
+        <span>Activo cada mes</span>
+        <strong>${formatMoney(plan.amount)}</strong>
+      </p>
+    `;
   }
 
   function getBusinessSupplyStatus(business) {
@@ -3642,6 +3671,9 @@
       const contributionSuggestion = playerCashAvailable >= 1000
         ? String(Math.min(Math.max(1000, Math.round(business.valuation * 0.025)), playerCashAvailable))
         : "";
+      const contributionPlan = getBusinessMonthlyPlan(business, "contribute");
+      const amountCanSchedule = Boolean(amountConfig && MONTHLY_BUSINESS_ACTION_LABELS[activeAmountAction]);
+      const amountPlan = amountCanSchedule ? getBusinessMonthlyPlan(business, activeAmountAction) : null;
       row.innerHTML = `
         <summary class="business-head">
           <div class="business-title">
@@ -3714,26 +3746,52 @@
           <div class="supplier-list">
             ${suppliersHtml || "<span>Sin proveedores pendientes.</span>"}
           </div>
-          <form class="business-contribution ${isContributionOpen ? "active" : ""}" data-business-contribution-panel="${businessId}" ${isContributionOpen ? "" : "hidden"} novalidate>
-            <div>
+          <form class="business-contribution business-money-form ${isContributionOpen ? "active" : ""}" data-business-contribution-panel="${businessId}" ${isContributionOpen ? "" : "hidden"} novalidate>
+            <div class="business-money-primary">
               <label for="capital-${businessId}">Inyeccion de capital</label>
               <input id="capital-${businessId}" name="capitalAmount" type="tel" min="1000" max="${playerCashAvailable}" step="1000" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="${contributionSuggestion ? `Sugerido ${formatMoney(Number(contributionSuggestion))}` : "Monto a aportar"}" data-money-input="business-contribution" />
               <p class="amount-availability"><span>Disponible personal</span><strong>${formatMoney(playerCashAvailable)}</strong></p>
             </div>
-            <button class="btn btn-secondary btn-small" type="button" data-business-contribution-max="${businessId}">Max</button>
-            <button class="btn btn-primary btn-small" type="submit">Confirmar aporte</button>
-            <button class="btn btn-secondary btn-small" type="button" data-business-contribution-cancel="${businessId}">Cancelar</button>
+            <div class="monthly-injection-field">
+              <label for="capital-monthly-${businessId}">Aporte mensual programado</label>
+              <input id="capital-monthly-${businessId}" name="monthlyAmount" type="tel" min="1000" step="1000" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="Monto mensual" value="${contributionPlan.active ? Math.round(contributionPlan.amount) : ""}" data-money-input="business-monthly" data-business-monthly-action="contribute" />
+              ${getMonthlyPlanStatusHtml(contributionPlan)}
+            </div>
+            <div class="business-form-actions">
+              <button class="btn btn-secondary btn-small" type="button" data-business-contribution-max="${businessId}">Max</button>
+              <button class="btn btn-primary btn-small" type="submit">Confirmar aporte</button>
+              <button class="btn btn-secondary btn-small" type="button" data-business-contribution-cancel="${businessId}">Cancelar</button>
+            </div>
+            <div class="monthly-injection-controls">
+              <button class="btn btn-secondary btn-small" type="button" data-business-monthly-set="${businessId}" data-business-monthly-action="contribute">${contributionPlan.active ? "Actualizar mensual" : "Activar mensual"}</button>
+              ${contributionPlan.active ? `<button class="btn btn-secondary btn-small" type="button" data-business-monthly-pause="${businessId}" data-business-monthly-action="contribute">Pausar mensual</button>` : ""}
+            </div>
           </form>
-          <form class="business-contribution ${amountConfig ? "active" : ""}" data-business-amount-panel="${businessId}" ${amountConfig ? "" : "hidden"} novalidate>
+          <form class="business-contribution business-money-form ${amountConfig ? "active" : ""}" data-business-amount-panel="${businessId}" ${amountConfig ? "" : "hidden"} novalidate>
             <input type="hidden" name="businessAction" value="${amountConfig ? activeAmountAction : ""}" />
-            <div>
+            <div class="business-money-primary">
               <label for="amount-${businessId}">${escapeHtml(amountConfig ? amountConfig.inputLabel : "Monto")}</label>
               <input id="amount-${businessId}" name="actionAmount" type="tel" min="${amountConfig ? amountConfig.min : 0}" max="${amountConfig ? amountConfig.available : 0}" step="${amountConfig ? amountConfig.step : 1}" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="${escapeHtml(amountConfig ? amountConfig.inputLabel : "Monto")}" value="${amountConfig ? amountConfig.value : ""}" data-money-input="business-action" />
               ${amountConfig ? `<p class="amount-availability"><span>${escapeHtml(amountConfig.availableLabel)}</span><strong>${formatMoney(amountConfig.available)}</strong></p>` : ""}
             </div>
-            <button class="btn btn-secondary btn-small" type="button" data-business-amount-max="${businessId}" data-business-amount-suggested="${amountConfig ? amountConfig.value : ""}" data-business-amount-available="${amountConfig ? amountConfig.available : 0}">Usar sugerido</button>
-            <button class="btn btn-primary btn-small" type="submit">${amountConfig ? amountConfig.buttonLabel : "Confirmar"}</button>
-            <button class="btn btn-secondary btn-small" type="button" data-business-amount-cancel="${businessId}">Cancelar</button>
+            ${amountCanSchedule ? `
+              <div class="monthly-injection-field">
+                <label for="amount-monthly-${businessId}">${escapeHtml(amountPlan.label)}</label>
+                <input id="amount-monthly-${businessId}" name="monthlyAmount" type="tel" min="${amountConfig.min}" step="${amountConfig.step}" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" placeholder="Monto mensual" value="${amountPlan.active ? Math.round(amountPlan.amount) : ""}" data-money-input="business-monthly" data-business-monthly-action="${escapeHtml(activeAmountAction)}" />
+                ${getMonthlyPlanStatusHtml(amountPlan)}
+              </div>
+            ` : ""}
+            <div class="business-form-actions">
+              <button class="btn btn-secondary btn-small" type="button" data-business-amount-max="${businessId}" data-business-amount-suggested="${amountConfig ? amountConfig.value : ""}" data-business-amount-available="${amountConfig ? amountConfig.available : 0}">Usar sugerido</button>
+              <button class="btn btn-primary btn-small" type="submit">${amountConfig ? amountConfig.buttonLabel : "Confirmar"}</button>
+              <button class="btn btn-secondary btn-small" type="button" data-business-amount-cancel="${businessId}">Cancelar</button>
+            </div>
+            ${amountCanSchedule ? `
+              <div class="monthly-injection-controls">
+                <button class="btn btn-secondary btn-small" type="button" data-business-monthly-set="${businessId}" data-business-monthly-action="${escapeHtml(activeAmountAction)}">${amountPlan.active ? "Actualizar mensual" : "Activar mensual"}</button>
+                ${amountPlan.active ? `<button class="btn btn-secondary btn-small" type="button" data-business-monthly-pause="${businessId}" data-business-monthly-action="${escapeHtml(activeAmountAction)}">Pausar mensual</button>` : ""}
+              </div>
+            ` : ""}
           </form>
           <div class="business-actions">
             <button type="button" class="${isContributionOpen ? "active" : ""}" data-business-id="${businessId}" data-business-contribute-toggle="${businessId}" aria-expanded="${isContributionOpen}">${isContributionOpen ? "Cerrar aporte" : "Aportar"}</button>
@@ -3859,6 +3917,51 @@
     });
   }
 
+  function renderPropertySaleOffers(position) {
+    const offers = player.getRealEstateSaleOffers
+      ? player.getRealEstateSaleOffers(state, position.assetId)
+      : [];
+
+    const offersHtml = offers.length
+      ? offers.map((offer) => {
+        const gainClass = offer.realizedGain >= 0 ? "is-positive" : "is-negative";
+        const debtLine = offer.mortgagePayoff > 0
+          ? `<span>Hipoteca a cancelar ${formatMoney(offer.mortgagePayoff)}${offer.debtShortfall > 0 ? ` / saldo ${formatMoney(offer.debtShortfall)}` : ""}</span>`
+          : "";
+        return `
+          <article class="property-offer-card">
+            <div>
+              <span>${escapeHtml(offer.buyerLabel)}</span>
+              <strong>${escapeHtml(offer.buyerName)}</strong>
+              <small>Precio vs mercado ${formatSignedPercent(offer.premium)}</small>
+            </div>
+            <div class="property-offer-metrics">
+              <div><span>Oferta</span><strong>${formatMoney(offer.gross)}</strong></div>
+              <div><span>Recibes</span><strong>${formatMoney(offer.total)}</strong></div>
+              <div><span>Ganancia</span><strong class="${gainClass}">${formatSignedMoney(offer.realizedGain)}</strong></div>
+            </div>
+            <small>Comision ${formatMoney(offer.fees)} / Impuestos ${formatMoney(offer.taxes)}</small>
+            ${debtLine}
+            <button type="button" data-property-sale-offer="${escapeHtml(offer.id)}" data-asset-id="${escapeHtml(position.assetId)}">Vender a este comprador</button>
+          </article>
+        `;
+      }).join("")
+      : `<p class="property-offer-empty">Sin compradores activos para este inmueble.</p>`;
+
+    return `
+      <details class="property-sale-panel">
+        <summary>Vender inmueble</summary>
+        <div class="property-offer-list">
+          <div class="property-offer-intro">
+            <strong>Compradores interesados</strong>
+            <span>Compara oferta, impuestos y efectivo neto antes de cerrar.</span>
+          </div>
+          ${offersHtml}
+        </div>
+      </details>
+    `;
+  }
+
   function renderRealEstate(assets) {
     renderGoodsCatalog(assets);
 
@@ -3874,6 +3977,7 @@
         averageOccupancy: 0,
         hotels: 0
       };
+    const propertyUnits = summary.positions.reduce((sum, position) => sum + (Number(position.quantity) || 0), 0);
 
     els.realestateEmpty.hidden = summary.positions.length > 0;
     els.realestateSummary.innerHTML = `
@@ -3881,6 +3985,8 @@
       <div><span>Ingresos mes</span><strong>${formatMoney(summary.gross)}</strong></div>
       <div><span>Costos mes</span><strong>${formatMoney(summary.costs)}</strong></div>
       <div><span>Neto mes</span><strong class="${summary.net >= 0 ? "is-positive" : "is-negative"}">${formatMoney(summary.net)}</strong></div>
+      <div><span>Inmuebles</span><strong>${summary.positions.length}</strong></div>
+      <div><span>Unidades</span><strong>${formatQuantity(propertyUnits)}</strong></div>
       <div><span>Ocupacion</span><strong>${formatPercent(summary.averageOccupancy)}</strong></div>
       <div><span>Hoteles</span><strong>${summary.hotels}</strong></div>
     `;
@@ -3915,6 +4021,7 @@
           <button type="button" data-property-action="price_up" data-asset-id="${position.assetId}">Renta +</button>
           <button type="button" data-property-action="price_down" data-asset-id="${position.assetId}">Renta -</button>
         </div>
+        ${renderPropertySaleOffers(position)}
       `;
       els.realestateList.appendChild(row);
     });
@@ -4310,128 +4417,6 @@
       els.cloudPassphraseStatus.textContent = config && config.passphrase
         ? `Clave sync: ${config.passphrase}`
         : "Clave sync: no guardada";
-    }
-    if (typeof message === "string" && els.cloudSetupStatus) {
-      els.cloudSetupStatus.textContent = message;
-      delete els.cloudSetupStatus.dataset.tone;
-    }
-  }
-
-  function setCloudSetupStatus(message, tone) {
-    if (!els.cloudSetupStatus) return;
-    els.cloudSetupStatus.textContent = message || "";
-    if (tone) {
-      els.cloudSetupStatus.dataset.tone = tone;
-    } else {
-      delete els.cloudSetupStatus.dataset.tone;
-    }
-  }
-
-  function normalizeCloudSlotSummary(slot) {
-    if (typeof slot === "number") return { slot };
-    if (!slot || typeof slot !== "object") return null;
-    const slotNumber = Number(slot.slot);
-    if (!Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 3) return null;
-    return {
-      slot: slotNumber,
-      playerName: typeof slot.playerName === "string" ? slot.playerName.trim() : "",
-      day: Number.isFinite(Number(slot.day)) ? Number(slot.day) : null,
-      updatedAt: typeof slot.updatedAt === "string" ? slot.updatedAt : ""
-    };
-  }
-
-  function formatCloudSlotLabel(slot) {
-    const parts = [`Slot nube ${slot.slot}`];
-    if (slot.playerName) parts.push(slot.playerName);
-    if (Number.isFinite(slot.day)) parts.push(`Dia ${slot.day}`);
-    return parts.join(" / ");
-  }
-
-  function renderCloudSetupSlots(slots) {
-    if (!els.cloudLoadSlot) return;
-    cloudRemoteSlots = (Array.isArray(slots) ? slots : [])
-      .map(normalizeCloudSlotSummary)
-      .filter(Boolean)
-      .sort((a, b) => a.slot - b.slot);
-
-    els.cloudLoadSlot.innerHTML = "";
-    if (cloudRemoteSlots.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "Sin slots remotos";
-      els.cloudLoadSlot.appendChild(option);
-    } else {
-      cloudRemoteSlots.forEach((slot) => {
-        const option = document.createElement("option");
-        option.value = String(slot.slot);
-        option.textContent = formatCloudSlotLabel(slot);
-        els.cloudLoadSlot.appendChild(option);
-      });
-    }
-
-    els.cloudLoadSlot.disabled = cloudRemoteSlots.length === 0;
-    if (els.loadCloudButton) els.loadCloudButton.disabled = cloudRemoteSlots.length === 0;
-  }
-
-  function hydrateCloudSetupFields() {
-    if (!cloudSync) return;
-    const current = cloudSync.readConfig && cloudSync.readConfig();
-    if (els.cloudHandle && current && current.handle) els.cloudHandle.value = current.handle;
-    if (els.cloudPassphrase && current && current.passphrase) els.cloudPassphrase.value = current.passphrase;
-    if (els.cloudBaseUrl) {
-      els.cloudBaseUrl.value = current && current.baseUrl ? current.baseUrl : cloudSync.DEFAULT_BASE_URL;
-    }
-    renderCloudSetupSlots([]);
-  }
-
-  function readCloudSetupCredentials() {
-    if (!cloudSync || typeof cloudSync.listSlots !== "function") {
-      setCloudSetupStatus("Modulo de nube no disponible.", "error");
-      return null;
-    }
-
-    const handle = els.cloudHandle ? els.cloudHandle.value.trim() : "";
-    const passphrase = els.cloudPassphrase ? els.cloudPassphrase.value : "";
-    const baseUrl = els.cloudBaseUrl ? els.cloudBaseUrl.value.trim() : cloudSync.DEFAULT_BASE_URL;
-    if (!handle) {
-      setCloudSetupStatus("Escribe el handle que usaste en el celular.", "error");
-      return null;
-    }
-    if (!passphrase || passphrase.trim().length < 6) {
-      setCloudSetupStatus("Escribe la clave de sincronizacion, minimo 6 caracteres.", "error");
-      return null;
-    }
-    if (!baseUrl) {
-      setCloudSetupStatus("Escribe la URL del servidor sync.", "error");
-      return null;
-    }
-    return { handle, passphrase, baseUrl };
-  }
-
-  async function refreshCloudSetupSlots() {
-    const credentials = readCloudSetupCredentials();
-    if (!credentials) return false;
-
-    setSetupBusy(true);
-    setCloudSetupStatus("Buscando partida en nube...", "muted");
-    try {
-      const result = await cloudSync.listSlots(credentials);
-      renderCloudSetupSlots(result.slots);
-      updateCloudStatus();
-      if (cloudRemoteSlots.length === 0) {
-        setCloudSetupStatus("Cuenta encontrada, pero no tiene slots remotos. Abre la partida en el celular y usa Subir slot actual.", "error");
-        return false;
-      }
-      setCloudSetupStatus(`Encontrados ${cloudRemoteSlots.length} slot(s) remotos. Elige uno y carga.`, "ok");
-      return true;
-    } catch (error) {
-      console.error(error);
-      renderCloudSetupSlots([]);
-      setCloudSetupStatus(error.message || "No se pudo buscar la partida en nube.", "error");
-      showToast(error.message || "No se pudo buscar la partida en nube.", "error");
-      return false;
-    } finally {
-      setSetupBusy(false);
     }
   }
 
@@ -4954,6 +4939,41 @@
       .find((panel) => panel.dataset.businessAmountPanel === businessId) || null;
   }
 
+  function getBusinessMonthlyInput(businessId, action) {
+    const panel = action === "contribute"
+      ? getBusinessContributionPanel(businessId)
+      : getBusinessAmountPanel(businessId);
+    if (!panel) return null;
+    return Array.from(panel.querySelectorAll("input[name='monthlyAmount'][data-business-monthly-action]"))
+      .find((input) => input.dataset.businessMonthlyAction === action) || null;
+  }
+
+  function getBusinessMonthlyFallbackInput(businessId, action) {
+    const panel = action === "contribute"
+      ? getBusinessContributionPanel(businessId)
+      : getBusinessAmountPanel(businessId);
+    if (!panel) return null;
+    return panel.querySelector(action === "contribute" ? "input[name='capitalAmount']" : "input[name='actionAmount']");
+  }
+
+  function readBusinessMonthlyAmount(businessId, action) {
+    const monthlyInput = getBusinessMonthlyInput(businessId, action);
+    let amount = parseMoneyInput(monthlyInput && monthlyInput.value);
+    let input = monthlyInput;
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      const fallbackInput = getBusinessMonthlyFallbackInput(businessId, action);
+      const fallbackAmount = parseMoneyInput(fallbackInput && fallbackInput.value);
+      if (Number.isFinite(fallbackAmount) && fallbackAmount > 0) {
+        amount = fallbackAmount;
+        input = fallbackInput;
+        if (monthlyInput) monthlyInput.value = String(Math.floor(fallbackAmount));
+      }
+    }
+
+    return { amount, input };
+  }
+
   function setBusinessContributionOpen(businessId, isOpen) {
     const panel = getBusinessContributionPanel(businessId);
     const card = panel ? panel.closest(".business-card") : els.businessList.querySelector(`[data-business-id="${businessId}"]`);
@@ -5027,6 +5047,64 @@
   }
 
   function handleBusinessContributionClick(event) {
+    const monthlySet = event.target.closest("[data-business-monthly-set][data-business-monthly-action]");
+    if (monthlySet) {
+      event.preventDefault();
+      const businessId = monthlySet.dataset.businessMonthlySet;
+      const action = monthlySet.dataset.businessMonthlyAction;
+      const monthlyAmount = readBusinessMonthlyAmount(businessId, action);
+      const input = monthlyAmount.input;
+      const amount = monthlyAmount.amount;
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        showToast(action === "contribute"
+          ? "Ingresa el monto mensual o el monto del aporte."
+          : "Ingresa un monto mensual valido.", "error");
+        focusAmountInput(input, { allowTouchFocus: true });
+        return;
+      }
+
+      const result = businesses.applyBusinessAction(state, businessId, "schedule_monthly", {
+        action,
+        amount,
+        active: true
+      });
+      if (!result.ok) {
+        showToast(result.message, "error");
+        focusAmountInput(input, { allowTouchFocus: true });
+        return;
+      }
+
+      if (action === "contribute") openBusinessContributionIds.add(businessId);
+      else openBusinessAmountActions.set(businessId, action);
+      expandedBusinessIds.add(businessId);
+      pushActivity(result.message);
+      persist(result.message);
+      return;
+    }
+
+    const monthlyPause = event.target.closest("[data-business-monthly-pause][data-business-monthly-action]");
+    if (monthlyPause) {
+      event.preventDefault();
+      const businessId = monthlyPause.dataset.businessMonthlyPause;
+      const action = monthlyPause.dataset.businessMonthlyAction;
+      const result = businesses.applyBusinessAction(state, businessId, "schedule_monthly", {
+        action,
+        active: false
+      });
+      if (!result.ok) {
+        showToast(result.message, "error");
+        return;
+      }
+
+      if (action === "contribute") openBusinessContributionIds.add(businessId);
+      else openBusinessAmountActions.set(businessId, action);
+      expandedBusinessIds.add(businessId);
+      pushActivity(result.message);
+      persist(result.message);
+      return;
+    }
+
     const toggle = event.target.closest("[data-business-contribute-toggle]");
     if (toggle) {
       event.preventDefault();
@@ -5049,7 +5127,9 @@
       const input = panel ? panel.querySelector("input[name='capitalAmount']") : null;
       if (input) {
         input.value = String(Math.max(0, Math.floor(Number(state.player && state.player.cash) || 0)));
-        focusAmountInput(input);
+        const monthlyInput = getBusinessMonthlyInput(max.dataset.businessContributionMax, "contribute");
+        if (monthlyInput && !sanitizeMoneyInput(monthlyInput.value)) monthlyInput.value = input.value;
+        focusAmountInput(input, { allowTouchFocus: true });
       }
     }
 
@@ -5081,7 +5161,7 @@
         const available = Number(amountMax.dataset.businessAmountAvailable);
         const nextAmount = Number.isFinite(suggested) && suggested > 0 ? suggested : available;
         if (Number.isFinite(nextAmount) && nextAmount > 0) input.value = String(Math.floor(nextAmount));
-        focusAmountInput(input);
+        focusAmountInput(input, { allowTouchFocus: true });
       }
     }
   }
@@ -5173,6 +5253,18 @@
   }
 
   function handleRealEstateAction(event) {
+    const offerButton = event.target.closest("[data-property-sale-offer][data-asset-id]");
+    if (offerButton && player && typeof player.sellRealEstateToBuyer === "function") {
+      const result = player.sellRealEstateToBuyer(state, offerButton.dataset.assetId, offerButton.dataset.propertySaleOffer);
+      if (!result.ok) {
+        showToast(result.message, "error");
+        return;
+      }
+      pushActivity(result.message);
+      persist(result.message);
+      return;
+    }
+
     const button = event.target.closest("[data-property-action][data-asset-id]");
     if (!button || !player) return;
     const result = player.applyRealEstateAction
@@ -5339,36 +5431,6 @@
   function bindEvents() {
     els.setupForm.addEventListener("submit", startGame);
     els.loadButton.addEventListener("click", loadGame);
-    if (els.cloudCheckButton) {
-      els.cloudCheckButton.addEventListener("click", refreshCloudSetupSlots);
-    }
-    [els.cloudHandle, els.cloudPassphrase, els.cloudBaseUrl]
-      .filter(Boolean)
-      .forEach((input) => {
-        input.addEventListener("input", () => {
-          renderCloudSetupSlots([]);
-          setCloudSetupStatus("");
-        });
-      });
-    if (els.loadCloudButton) {
-      els.loadCloudButton.addEventListener("click", async () => {
-        if (cloudRemoteSlots.length === 0) {
-          const found = await refreshCloudSetupSlots();
-          if (!found) return;
-        }
-        currentSlot = Number(els.cloudLoadSlot && els.cloudLoadSlot.value || 0);
-        if (!Number.isInteger(currentSlot) || currentSlot < 1 || currentSlot > 3) {
-          setCloudSetupStatus("Elige un slot remoto disponible.", "error");
-          return;
-        }
-        await pullCloudSlotToCurrent();
-        if (state) {
-          setSetupBusy(true);
-          setScreen("game", { animate: true });
-          scheduleWelcomeGuide();
-        }
-      });
-    }
     els.playerName.addEventListener("input", () => {
       els.nameError.textContent = "";
       els.playerName.setAttribute("aria-invalid", "false");
@@ -5591,7 +5653,6 @@
     setSetupBusy(false);
     updateLoadButton();
     updateCloudStatus();
-    hydrateCloudSetupFields();
     bindEvents();
   }
 

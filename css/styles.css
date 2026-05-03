@@ -280,6 +280,7 @@ input,
 select,
 textarea {
   width: 100%;
+  min-width: 0;
   min-height: var(--control-h);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -313,6 +314,15 @@ input:disabled,
 input[aria-invalid="true"] {
   border-color: var(--red);
   box-shadow: 0 0 0 2px rgba(239, 95, 95, 0.14);
+}
+
+input[data-money-input] {
+  caret-color: var(--focus);
+  font-family: var(--mono);
+  letter-spacing: 0;
+  touch-action: manipulation;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .field-error {
@@ -465,29 +475,10 @@ input[aria-invalid="true"] {
   grid-template-columns: 1fr;
 }
 
-.load-slot-wrap,
-.cloud-slot-wrap {
+.load-slot-wrap {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
   gap: var(--space-xs);
-}
-
-.cloud-entry {
-  display: grid;
-  gap: var(--space-xs);
-  margin-top: var(--space-sm);
-}
-
-.cloud-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-xs);
-}
-
-.cloud-entry-copy {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
 }
 
 .btn {
@@ -3224,6 +3215,65 @@ input[aria-invalid="true"] {
   width: 100%;
 }
 
+.business-money-form {
+  align-items: stretch;
+}
+
+.business-money-primary,
+.monthly-injection-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.monthly-injection-field {
+  border: 1px solid rgba(114, 248, 224, 0.16);
+  border-radius: var(--radius);
+  background: rgba(5, 8, 13, 0.38);
+  padding: 8px;
+}
+
+.monthly-injection-field label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.monthly-injection-status {
+  margin-top: 2px;
+}
+
+.monthly-injection-status.is-active strong {
+  color: var(--gold);
+}
+
+.monthly-injection-status.is-warning strong {
+  color: var(--amber);
+}
+
+.business-form-actions,
+.monthly-injection-controls {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.business-form-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.monthly-injection-controls {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.business-form-actions .btn,
+.monthly-injection-controls .btn {
+  width: 100%;
+  min-height: 44px;
+  white-space: normal;
+}
+
 .business-actions button.active,
 .business-actions button[data-business-contribute-toggle].active {
   border-color: rgba(244, 196, 78, 0.58);
@@ -3282,6 +3332,114 @@ input[aria-invalid="true"] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-xs);
+}
+
+.property-sale-panel {
+  min-width: 0;
+  border: 1px solid rgba(244, 196, 78, 0.22);
+  border-radius: var(--radius);
+  background: rgba(5, 8, 13, 0.42);
+  overflow: hidden;
+}
+
+.property-sale-panel summary {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-xs);
+  align-items: center;
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+  color: var(--gold);
+  font-size: 0.8rem;
+  font-weight: 900;
+  list-style: none;
+}
+
+.property-sale-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.property-sale-panel summary::after {
+  content: "+";
+  justify-self: end;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.property-sale-panel[open] summary {
+  border-bottom: 1px solid rgba(244, 196, 78, 0.18);
+}
+
+.property-sale-panel[open] summary::after {
+  content: "-";
+}
+
+.property-offer-list {
+  display: grid;
+  gap: var(--space-xs);
+  padding: var(--space-xs);
+}
+
+.property-offer-intro,
+.property-offer-card {
+  min-width: 0;
+}
+
+.property-offer-intro {
+  display: grid;
+  gap: 2px;
+}
+
+.property-offer-intro strong {
+  color: var(--text);
+}
+
+.property-offer-card {
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid rgba(114, 248, 224, 0.16);
+  border-radius: var(--radius);
+  background: rgba(8, 12, 18, 0.74);
+  padding: var(--pad-card);
+}
+
+.property-offer-card span,
+.property-offer-card small,
+.property-offer-empty {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.property-offer-card strong {
+  color: var(--text);
+}
+
+.property-offer-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.property-offer-metrics > div {
+  min-width: 0;
+  border: 1px solid rgba(114, 248, 224, 0.12);
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.18);
+  padding: 6px;
+}
+
+.property-offer-metrics span {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.property-offer-metrics strong {
+  display: block;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
 }
 
 .business-metrics {
@@ -3924,14 +4082,6 @@ input[aria-invalid="true"] {
     grid-column: span 1;
   }
 
-  .cloud-entry {
-    grid-column: 1 / -1;
-  }
-
-  .cloud-form {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(180px, 0.8fr) minmax(150px, auto);
-  }
-
   .app-header {
     grid-template-columns: minmax(210px, 1fr) minmax(300px, 1fr) minmax(174px, auto);
     align-items: center;
@@ -4119,9 +4269,19 @@ input[aria-invalid="true"] {
     justify-content: end;
   }
 
-  .business-contribution {
-    grid-template-columns: minmax(180px, 1fr) minmax(70px, auto) minmax(150px, auto) minmax(110px, auto);
-    align-items: end;
+  .business-contribution.business-money-form {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    align-items: stretch;
+  }
+
+  .business-form-actions,
+  .monthly-injection-controls {
+    grid-column: 1 / -1;
+  }
+
+  .monthly-injection-controls {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 220px));
+    justify-content: end;
   }
 
   .staff-line {
@@ -4142,6 +4302,14 @@ input[aria-invalid="true"] {
 
   .property-actions {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .property-offer-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .property-offer-intro {
+    grid-column: 1 / -1;
   }
 
   .trade-estimate,
@@ -5776,6 +5944,11 @@ input[aria-invalid="true"] {
     padding: 8px;
   }
 
+  .business-form-actions,
+  .monthly-injection-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .staff-line {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5907,8 +6080,7 @@ input[aria-invalid="true"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .load-slot-wrap,
-  .cloud-slot-wrap {
+  .load-slot-wrap {
     grid-template-columns: minmax(0, 1fr);
   }
 

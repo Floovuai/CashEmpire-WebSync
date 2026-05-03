@@ -7,6 +7,13 @@
   const player = window.CashEmpirePlayer;
   const strategy = window.CashEmpireStrategy;
   const MAX_BUSINESSES = 36;
+  const MONTHLY_INJECTION_ACTIONS = {
+    contribute: { label: "Aporte de capital", min: 1000 },
+    inventory: { label: "Insumos", min: 500 },
+    marketing: { label: "Marketing", min: 100 },
+    rnd: { label: "I+D", min: 250 },
+    supplier_credit: { label: "Credito proveedor", min: 500 }
+  };
 
   const SECTOR_DEFAULTS = {
     food: { label: "Gastronomia", grossMargin: 0.64, baseTicket: 14, demand: 1450, unitType: "local", staffPerUnit: 5 },
@@ -91,6 +98,32 @@
 
   function createId(prefix) {
     return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function getMonthlyInjectionMeta(action) {
+    return MONTHLY_INJECTION_ACTIONS[action] || null;
+  }
+
+  function normalizeMonthlyInjectionPlan(rawPlan, action) {
+    const meta = getMonthlyInjectionMeta(action);
+    const source = isObject(rawPlan) ? rawPlan : {};
+    const amount = roundMoney(Math.max(0, Number(source.amount) || 0));
+
+    return {
+      active: Boolean(source.active) && amount >= (meta ? meta.min : 1),
+      amount,
+      lastProcessedMonth: Math.max(0, Math.floor(Number(source.lastProcessedMonth) || 0)),
+      lastOk: Object.prototype.hasOwnProperty.call(source, "lastOk") ? Boolean(source.lastOk) : true,
+      lastMessage: typeof source.lastMessage === "string" ? source.lastMessage.slice(0, 160) : ""
+    };
+  }
+
+  function normalizeMonthlyInjections(rawPlans) {
+    const source = isObject(rawPlans) ? rawPlans : {};
+    return Object.keys(MONTHLY_INJECTION_ACTIONS).reduce((plans, action) => {
+      plans[action] = normalizeMonthlyInjectionPlan(source[action], action);
+      return plans;
+    }, {});
   }
 
   function getSectorDefaults(sector) {
@@ -692,6 +725,7 @@
       payables: roundMoney(totalPayables),
       receivables: roundMoney(Math.max(0, Number(rawBusiness.receivables) || 0)),
       pendingDividends: roundMoney(Math.max(0, Number(rawBusiness.pendingDividends) || 0)),
+      monthlyInjections: normalizeMonthlyInjections(rawBusiness.monthlyInjections),
       newsFeed: Array.isArray(rawBusiness.newsFeed)
         ? rawBusiness.newsFeed.map(normalizeBusinessNewsItem).filter(Boolean).slice(-8)
         : [],
@@ -1229,6 +1263,142 @@
     return impacted;
   }
 
+  function formatMoneyBrief(amount) {
+    return `$${Math.round(Number(amount) || 0).toLocaleString("en-US")}`;
+  }
+
+  function applyMonthlyInjectionAction(state, business, action, value) {
+    const meta = getMonthlyInjectionMeta(action);
+    if (!meta) return { ok: false, message: "Plan mensual no reconocido." };
+
+    const amount = roundMoney(Math.max(meta.min, Number(value) || 0));
+    if (amount < meta.min) {
+      return { ok: false, message: `El minimo para ${meta.label.toLowerCase()} mensual es ${formatMoneyBrief(meta.min)}.` };
+    }
+
+    if (action === "contribute") {
+      const availableCash = roundMoney(Math.max(0, Number(state.player && state.player.cash) || 0));
+      if (availableCash < amount) {
+        return { ok: false, amount, message: `${business.name}: aporte mensual de ${formatMoneyBrief(amount)} no ejecutado por efectivo personal insuficiente.` };
+      }
+
+      state.player.cash = roundMoney(state.player.cash - amount);
+      business.cash = roundMoney(business.cash + amount);
+      business.seedValuation = roundMoney(Math.max(business.seedValuation, business.valuation + amount * 0.35));
+      business.valuation = roundMoney(business.valuation + amount * 0.45);
+      if (player && player.appendCashflow) {
+        player.appendCashflow(state, {
+          type: "monthly_capital_contribution",
+          businessId: business.id,
+          scope: "business",
+          label: `Aporte mensual ${business.name}`,
+          amount,
+          gross: amount
+        });
+      }
+      return { ok: true, amount, message: `${business.name}: aporte mensual de ${formatMoneyBrief(amount)} aplicado.` };
+    }
+
+    if (action === "marketing") {
+      if (business.cash < amount) {
+        return { ok: false, amount, message: `${business.name}: marketing mensual de ${formatMoneyBrief(amount)} no ejecutado por caja empresarial insuficiente.` };
+      }
+      business.cash = roundMoney(business.cash - amount);
+      business.marketing = roundMoney(business.marketing + amount * 0.28);
+      business.reputation = clamp(business.reputation + amount / Math.max(1, business.valuation) * 0.14, 0.05, 1.2);
+      return { ok: true, amount, message: `${business.name}: marketing mensual de ${formatMoneyBrief(amount)} aplicado.` };
+    }
+
+    if (action === "rnd") {
+      if (business.cash < amount) {
+        return { ok: false, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} no ejecutado por caja empresarial insuficiente.` };
+      }
+      business.cash = roundMoney(business.cash - amount);
+      business.rnd = roundMoney(business.rnd + amount * 0.38);
+      business.productivity = clamp(business.productivity + amount / Math.max(1, business.valuation) * 0.18, 0.1, 1.4);
+      business.reputation = clamp(business.reputation + amount / Math.max(1, business.valuation) * 0.04, 0.05, 1.2);
+      return { ok: true, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} aplicado.` };
+    }
+
+    if (action === "inventory") {
+      syncBusinessInventory(business);
+      if (business.cash < amount) {
+        return { ok: false, amount, message: `${business.name}: compra mensual de insumos por ${formatMoneyBrief(amount)} no ejecutada por caja empresarial insuficiente.` };
+      }
+      business.cash = roundMoney(business.cash - amount);
+      const quote = purchaseSupplies(business, amount);
+      return {
+        ok: true,
+        amount,
+        message: `${business.name}: compra mensual de ${Math.round(quote.purchasedUnits).toLocaleString("en-US")} ${business.supplies.unitLabel} aplicada.`
+      };
+    }
+
+    if (action === "supplier_credit") {
+      const supplier = business.suppliers.slice().sort((a, b) => b.creditLimit - b.payableBalance - (a.creditLimit - a.payableBalance))[0];
+      const capacity = supplier ? roundMoney(Math.max(0, supplier.creditLimit - supplier.payableBalance)) : 0;
+      const creditAmount = roundMoney(Math.min(capacity, amount));
+
+      if (!supplier || creditAmount <= 0) {
+        return { ok: false, amount, message: `${business.name}: credito proveedor mensual no ejecutado porque no hay cupo disponible.` };
+      }
+
+      supplier.payableBalance = roundMoney(supplier.payableBalance + creditAmount);
+      supplier.daysUntilDue = supplier.paymentTermsDays + 30;
+      supplier.contractType = "credit";
+      purchaseSupplies(business, creditAmount, supplier);
+      business.payables = roundMoney(business.payables + creditAmount);
+      business.suppliersReliability = clamp(business.suppliersReliability + 0.01, 0.25, 1);
+      return { ok: true, amount: creditAmount, message: `${business.name}: credito proveedor mensual de ${formatMoneyBrief(creditAmount)} aplicado a insumos.` };
+    }
+
+    return { ok: false, message: "Plan mensual no reconocido." };
+  }
+
+  function processMonthlyInjectionPlans(state, business, monthKey) {
+    const day = state.time && state.time.day ? state.time.day : 1;
+    const entries = [];
+    business.monthlyInjections = normalizeMonthlyInjections(business.monthlyInjections);
+
+    Object.keys(MONTHLY_INJECTION_ACTIONS).forEach((action) => {
+      const plan = business.monthlyInjections[action];
+      if (!plan || !plan.active || plan.amount <= 0 || plan.lastProcessedMonth === monthKey) return;
+
+      const meta = getMonthlyInjectionMeta(action);
+      const result = applyMonthlyInjectionAction(state, business, action, plan.amount);
+      plan.lastProcessedMonth = monthKey;
+      plan.lastOk = Boolean(result.ok);
+      plan.lastMessage = result.message || "";
+
+      const message = {
+        key: `monthly:${business.id}:${action}:${monthKey}`,
+        businessId: business.id,
+        businessName: business.name,
+        source: "monthly_plan",
+        severity: result.ok ? "opportunity" : "warning",
+        title: result.ok
+          ? `${business.name}: ${meta.label} mensual activo`
+          : `${business.name}: ${meta.label} mensual pendiente`,
+        body: result.message,
+        actionHint: result.ok
+          ? "El plan seguira ejecutandose cada cierre mensual mientras este activo."
+          : "Revisa caja disponible o pausa el plan mensual antes del proximo cierre."
+      };
+
+      appendBusinessNewsItem(business, message, day);
+      entries.push({
+        type: "business_monthly_plan",
+        businessId: business.id,
+        action,
+        amount: result.amount || plan.amount,
+        messages: [message],
+        text: result.message
+      });
+    });
+
+    return entries;
+  }
+
   function processDailyBusinesses(state, eventImpact) {
     state.businesses = normalizeBusinesses(state.businesses);
     const day = state.time && state.time.day ? state.time.day : 1;
@@ -1241,6 +1411,7 @@
 
     state.businesses.forEach((business) => {
       if (business.lastProcessedMonth === monthKey) return;
+      entries.push(...processMonthlyInjectionPlans(state, business, monthKey));
       const result = processBusinessMonth(state, business, eventImpact);
       business.lastProcessedMonth = monthKey;
       entries.push({
@@ -1261,6 +1432,35 @@
 
     if (!business) {
       return { ok: false, message: "Empresa no encontrada." };
+    }
+
+    if (action === "schedule_monthly") {
+      const settings = isObject(value) ? value : {};
+      const targetAction = String(settings.action || settings.targetAction || "");
+      const meta = getMonthlyInjectionMeta(targetAction);
+
+      if (!meta) return { ok: false, message: "Plan mensual no reconocido." };
+
+      business.monthlyInjections = normalizeMonthlyInjections(business.monthlyInjections);
+      const plan = business.monthlyInjections[targetAction];
+      const shouldActivate = settings.active !== false;
+
+      if (!shouldActivate) {
+        plan.active = false;
+        plan.lastMessage = `${meta.label} mensual pausado.`;
+        return { ok: true, message: `${business.name}: ${meta.label.toLowerCase()} mensual pausado.` };
+      }
+
+      const amount = roundMoney(Math.max(0, Number(settings.amount) || 0));
+      if (amount < meta.min) {
+        return { ok: false, message: `El monto mensual minimo para ${meta.label.toLowerCase()} es ${formatMoneyBrief(meta.min)}.` };
+      }
+
+      plan.amount = amount;
+      plan.active = true;
+      plan.lastOk = true;
+      plan.lastMessage = `${meta.label} mensual programado por ${formatMoneyBrief(amount)}.`;
+      return { ok: true, message: `${business.name}: ${meta.label.toLowerCase()} mensual programado por ${formatMoneyBrief(amount)}.` };
     }
 
     if (action === "contribute") {
@@ -1620,6 +1820,7 @@
   window.CashEmpireBusinesses = {
     SECTOR_DEFAULTS,
     normalizeBusinesses,
+    normalizeMonthlyInjections,
     createFromAsset,
     foundBusiness,
     getRequiredEmployees,
