@@ -2,10 +2,10 @@
   "appId": "com.cashempire.game",
   "appName": "Cash Empire",
   "channel": "production",
-  "version": "1.0.0-20260503T165522Z",
+  "version": "1.0.0-20260503T170236Z",
   "minNativeVersion": "1.0.0",
-  "url": "cash-empire-1.0.0-20260503T165522Z.zip",
-  "sha256": "4ab2fa86e5350db5cc757382a9c96dcaa93e25708e456529471d95e98122a1e9",
-  "size": 5536869,
-  "createdAt": "2026-05-03T16:55:23.259Z"
+  "url": "cash-empire-1.0.0-20260503T170236Z.zip",
+  "sha256": "9fbf0de6ed2b556fb57f4dc76b19d51f88d62cc0ea138634364eebebc3e1bfe7",
+  "size": 5537713,
+  "createdAt": "2026-05-03T17:02:36.709Z"
 }

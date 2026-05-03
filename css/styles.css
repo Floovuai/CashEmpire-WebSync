@@ -3198,13 +3198,14 @@ input[data-money-input] {
 .business-contribution {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-xs);
+  gap: 10px;
   border: 1px solid rgba(244, 196, 78, 0.28);
   border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(244, 196, 78, 0.08), transparent 50%),
-    rgba(5, 8, 13, 0.52);
-  padding: var(--space-sm);
+    linear-gradient(135deg, rgba(244, 196, 78, 0.09), transparent 54%),
+    linear-gradient(180deg, rgba(114, 248, 224, 0.06), transparent 72%),
+    rgba(5, 8, 13, 0.58);
+  padding: 10px;
 }
 
 .business-contribution > div {
@@ -3217,31 +3218,54 @@ input[data-money-input] {
 
 .business-money-form {
   align-items: stretch;
+  grid-template-areas:
+    "primary"
+    "monthly"
+    "actions"
+    "monthly-controls";
 }
 
 .business-money-primary,
 .monthly-injection-field {
   display: grid;
-  gap: 4px;
+  align-content: start;
+  gap: 6px;
   min-width: 0;
+  border: 1px solid rgba(114, 248, 224, 0.14);
+  border-radius: var(--radius);
+  background: rgba(4, 9, 13, 0.48);
+  padding: 9px;
+}
+
+.business-money-primary {
+  grid-area: primary;
+  border-color: rgba(244, 196, 78, 0.18);
 }
 
 .monthly-injection-field {
-  border: 1px solid rgba(114, 248, 224, 0.16);
-  border-radius: var(--radius);
-  background: rgba(5, 8, 13, 0.38);
-  padding: 8px;
+  grid-area: monthly;
+  border-color: rgba(114, 248, 224, 0.18);
 }
 
+.business-money-primary label,
 .monthly-injection-field label {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 900;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
+.business-money-primary input,
+.monthly-injection-field input {
+  min-height: 46px;
+  background: rgba(8, 15, 17, 0.92);
+}
+
+.business-money-primary .amount-availability,
 .monthly-injection-status {
-  margin-top: 2px;
+  margin-top: 0;
+  padding-top: 2px;
 }
 
 .monthly-injection-status.is-active strong {
@@ -3255,22 +3279,31 @@ input[data-money-input] {
 .business-form-actions,
 .monthly-injection-controls {
   display: grid;
-  gap: var(--space-xs);
+  gap: 6px;
   min-width: 0;
 }
 
 .business-form-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-area: actions;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.business-form-actions .btn-primary {
+  grid-column: 1 / -1;
+  order: -1;
 }
 
 .monthly-injection-controls {
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  grid-area: monthly-controls;
+  grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
 }
 
 .business-form-actions .btn,
 .monthly-injection-controls .btn {
   width: 100%;
-  min-height: 44px;
+  min-height: 42px;
+  padding-inline: 9px;
+  line-height: 1.12;
   white-space: normal;
 }
 
@@ -3819,7 +3852,7 @@ input[data-money-input] {
 }
 
 .guide-modal {
-  width: min(100%, 620px);
+  width: min(100%, 760px);
   border-color: rgba(244, 196, 78, 0.42);
   background:
     linear-gradient(135deg, rgba(244, 196, 78, 0.14), transparent 34%),
@@ -3829,8 +3862,9 @@ input[data-money-input] {
 
 .guide-steps {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-sm);
-  margin: var(--space-md) 0 var(--space-lg);
+  margin: var(--space-md) 0 var(--space-sm);
 }
 
 .guide-steps > div {
@@ -3858,6 +3892,23 @@ input[data-money-input] {
 
 .guide-steps span {
   color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.42;
+}
+
+.guide-steps b {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.guide-note {
+  margin: 0 0 var(--space-md);
+  border: 1px solid rgba(47, 255, 209, 0.22);
+  border-radius: var(--radius);
+  background: rgba(47, 255, 209, 0.06);
+  color: var(--muted);
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.92rem;
 }
 
 .turn-summary-backdrop {
@@ -4271,12 +4322,26 @@ input[data-money-input] {
 
   .business-contribution.business-money-form {
     grid-template-columns: repeat(2, minmax(220px, 1fr));
+    grid-template-areas:
+      "primary monthly"
+      "actions actions"
+      "monthly-controls monthly-controls";
     align-items: stretch;
   }
 
   .business-form-actions,
   .monthly-injection-controls {
     grid-column: 1 / -1;
+  }
+
+  .business-form-actions {
+    grid-template-columns: minmax(92px, 120px) minmax(150px, 190px) minmax(98px, 130px);
+    justify-content: end;
+  }
+
+  .business-form-actions .btn-primary {
+    grid-column: auto;
+    order: 0;
   }
 
   .monthly-injection-controls {
@@ -5944,9 +6009,17 @@ input[data-money-input] {
     padding: 8px;
   }
 
-  .business-form-actions,
+  .business-money-primary,
+  .monthly-injection-field {
+    padding: 8px;
+  }
+
+  .business-form-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .monthly-injection-controls {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   }
 
   .staff-line {
@@ -6018,6 +6091,7 @@ input[data-money-input] {
   }
 
   .guide-steps {
+    grid-template-columns: 1fr;
     gap: 7px;
     margin: 8px 0 10px;
   }
@@ -6066,6 +6140,11 @@ input[data-money-input] {
   .trade-grid,
   .trade-estimate,
   .asset-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .business-form-actions,
+  .monthly-injection-controls {
     grid-template-columns: minmax(0, 1fr);
   }
 }

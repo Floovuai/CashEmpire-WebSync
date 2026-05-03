@@ -17,7 +17,7 @@ Este repositorio nuevo es la base para:
 
 - La raiz ya contiene la app publicada desde `Juego/` con controles WebSync.
 - `server/` esta listo para desplegarse en Node: guarda slots por `handle` + clave y no reemplaza el guardado local.
-- El bundle OTA vigente es `1.0.0-20260503T014050Z`.
+- El bundle OTA vigente es `1.0.0-20260503T170236Z`.
 - Para que el APK instalado se actualice sin reinstalar, este repo debe existir como `Floovuai/CashEmpire-WebSync` con GitHub Pages activo, porque esa URL ya esta grabada en `Juego/js/ota-config.js`.
 
 ## Flujo recomendado
