@@ -175,6 +175,7 @@
     userMenu: q("#user-menu"),
     saveNowButton: q("#btn-save-now"),
     otaCheckButton: q("#btn-ota-check"),
+    cloudLoadButton: q("#btn-load-cloud"),
     cloudConnectButton: q("#btn-cloud-connect"),
     cloudPushButton: q("#btn-cloud-push"),
     cloudPullButton: q("#btn-cloud-pull"),
@@ -214,6 +215,7 @@
     menuPlayerName: q("#menu-player-name"),
     saveStatus: q("#save-status"),
     cloudStatus: q("#cloud-status"),
+    cloudSetupStatus: q("#cloud-setup-status"),
     cloudPassphraseStatus: q("#cloud-passphrase-status"),
     otaStatus: q("#ota-status"),
     summaryDifficulty: q("#summary-difficulty"),
@@ -4481,11 +4483,12 @@
     }
   }
 
-  async function pullCloudSlotToCurrent() {
-    if (!cloudSync) return;
+  async function pullCloudSlotToCurrent(options) {
+    const enterGame = Boolean(options && options.enterGame);
+    if (!cloudSync) return false;
     if (!cloudSync.readConfig || !cloudSync.readConfig()) {
       const connected = await connectCloudAccount();
-      if (!connected) return;
+      if (!connected) return false;
     }
 
     try {
@@ -4496,15 +4499,27 @@
       }
 
       state = storage.save(normalized, currentSlot);
+      selectedAvatarId = getAvatarId(state.player.avatarId);
+      selectedScenario = state.strategy && state.strategy.scenario ? state.strategy.scenario : "free";
+      renderAvatarSelection();
+      renderScenarioSelection();
+      setChronoSpeed(0);
       render();
       updateLoadButton();
       updateCloudStatus(`Slot ${currentSlot} traido desde nube.`);
       showToast(`Slot ${currentSlot} cargado desde nube.`, "success");
       if (els.cloudSetupStatus) els.cloudSetupStatus.textContent = `Slot ${currentSlot} remoto listo para jugar.`;
+      if (enterGame) {
+        setScreen("game", { animate: true });
+        scheduleWelcomeGuide();
+      }
+      return true;
     } catch (error) {
       console.error(error);
       updateCloudStatus(error.message || "No se pudo traer el slot remoto.");
       showToast(error.message || "No se pudo traer el slot remoto.", "error");
+      if (els.cloudSetupStatus) els.cloudSetupStatus.textContent = error.message || "No se pudo traer el slot remoto.";
+      return false;
     }
   }
 
@@ -5447,6 +5462,15 @@
     });
     if (els.otaCheckButton) {
       els.otaCheckButton.addEventListener("click", checkOtaNow);
+    }
+    if (els.cloudLoadButton) {
+      els.cloudLoadButton.addEventListener("click", async () => {
+        if (isTransitioning) return;
+        setSetupBusy(true);
+        currentSlot = Number(els.loadSlot && els.loadSlot.value ? els.loadSlot.value : 1);
+        const loaded = await pullCloudSlotToCurrent({ enterGame: true });
+        if (!loaded) setSetupBusy(false);
+      });
     }
     if (els.cloudConnectButton) {
       els.cloudConnectButton.addEventListener("click", async () => {

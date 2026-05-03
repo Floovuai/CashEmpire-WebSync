@@ -109,6 +109,7 @@
 
         <div class="setup-actions">
           <button class="btn btn-primary" type="submit">Comenzar imperio</button>
+          <button class="btn btn-secondary" id="btn-load-cloud" type="button">Cargar nube</button>
           <div class="load-slot-wrap" id="load-slot-wrap" hidden>
             <select id="load-slot" aria-label="Slot de guardado">
               <option value="1">Slot 1</option>
@@ -117,6 +118,7 @@
             </select>
             <button class="btn btn-secondary" id="btn-load" type="button">Cargar partida</button>
           </div>
+          <small class="cloud-setup-status" id="cloud-setup-status" aria-live="polite">WebSync opcional: carga un slot remoto si ya conectaste una partida.</small>
         </div>
       </form>
     </main>
