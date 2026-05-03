@@ -677,7 +677,7 @@
           <h3>Banco e impuestos</h3>
           <div class="bank-summary" id="bank-summary"></div>
           <form class="inline-form compact-form" id="bank-form" novalidate>
-            <input id="bank-amount" type="number" min="500" step="500" placeholder="Monto" aria-label="Monto bancario" />
+            <input id="bank-amount" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" min="500" step="500" placeholder="Monto" aria-label="Monto bancario" data-money-input="bank-amount" />
             <select id="bank-business-target" aria-label="Empresa destino para credito empresarial">
               <option value="">Empresa destino</option>
             </select>

@@ -2988,17 +2988,30 @@
     return String(value ?? "").replace(/\D/g, "");
   }
 
+  function supportsTextSelection(input) {
+    if (!input || typeof input !== "object") return false;
+    const type = String(input.type || "").toLowerCase();
+    return ["text", "search", "tel", "url", "password"].includes(type);
+  }
+
   function normalizeMoneyInput(input) {
     if (!input) return;
     const value = input.value;
     const cleanValue = sanitizeMoneyInput(value);
     if (value === cleanValue) return;
-    const cursor = typeof input.selectionStart === "number" ? input.selectionStart : cleanValue.length;
+    const canSelect = supportsTextSelection(input);
+    const cursor = canSelect && typeof input.selectionStart === "number" ? input.selectionStart : cleanValue.length;
     const removedBeforeCursor = sanitizeMoneyInput(value.slice(0, cursor)).length;
     input.value = cleanValue;
-    if (typeof input.setSelectionRange === "function") {
+    if (canSelect && typeof input.setSelectionRange === "function") {
       const nextCursor = Math.min(cleanValue.length, removedBeforeCursor);
-      window.setTimeout(() => input.setSelectionRange(nextCursor, nextCursor), 0);
+      window.setTimeout(() => {
+        try {
+          input.setSelectionRange(nextCursor, nextCursor);
+        } catch (error) {
+          // Android can reject text-selection APIs on virtualized inputs.
+        }
+      }, 0);
     }
   }
 
@@ -3009,13 +3022,26 @@
     }
     input.focus();
     const isTouchViewport = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-    if (!isTouchViewport && typeof input.select === "function" && input.value) {
-      window.setTimeout(() => input.select(), 0);
+    const canSelect = supportsTextSelection(input);
+    if (!isTouchViewport && canSelect && typeof input.select === "function" && input.value) {
+      window.setTimeout(() => {
+        try {
+          input.select();
+        } catch (error) {
+          // Ignore selection failures on constrained mobile runtimes.
+        }
+      }, 0);
       return;
     }
-    if (typeof input.setSelectionRange === "function") {
+    if (canSelect && typeof input.setSelectionRange === "function") {
       const end = input.value.length;
-      window.setTimeout(() => input.setSelectionRange(end, end), 0);
+      window.setTimeout(() => {
+        try {
+          input.setSelectionRange(end, end);
+        } catch (error) {
+          // Ignore selection failures on constrained mobile runtimes.
+        }
+      }, 0);
     }
   }
 
@@ -5069,7 +5095,7 @@
   function handleBankAction(event) {
     const button = event.target.closest("[data-bank-action]");
     if (!button || !bank) return;
-    const amount = Number(els.bankAmount.value);
+    const amount = parseMoneyInput(els.bankAmount.value);
     const action = button.dataset.bankAction;
     const targetBusinessId = els.bankBusinessTarget ? els.bankBusinessTarget.value : "";
     const summary = bank.getBankSummary(state);
