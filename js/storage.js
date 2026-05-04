@@ -79,6 +79,20 @@
           actionHint: typeof item.actionHint === "string" ? item.actionHint.trim().slice(0, 160) : "",
           title: title || "Mensaje del juego",
           body,
+          sourceNewsId: typeof item.sourceNewsId === "string" && item.sourceNewsId ? item.sourceNewsId : null,
+          newsLevel: typeof item.newsLevel === "string" && item.newsLevel ? item.newsLevel : "",
+          newsTitle: typeof item.newsTitle === "string" ? item.newsTitle.trim().slice(0, 120) : "",
+          newsSummary: typeof item.newsSummary === "string" ? item.newsSummary.trim().slice(0, 420) : "",
+          newsAffected: Array.isArray(item.newsAffected)
+            ? item.newsAffected
+              .map((entry) => String(entry || "").trim())
+              .filter(Boolean)
+              .slice(0, 8)
+            : [],
+          newsDelta: Number.isFinite(Number(item.newsDelta)) ? Number(item.newsDelta) : null,
+          newsDuration: Math.max(0, Math.floor(Number(item.newsDuration) || 0)),
+          newsImpact: typeof item.newsImpact === "string" ? item.newsImpact.trim().slice(0, 240) : "",
+          bannerKey: typeof item.bannerKey === "string" && item.bannerKey ? item.bannerKey : "",
           createdAt: normalizeIsoDate(item.createdAt, fallbackDate),
           read: Boolean(item.read)
         };

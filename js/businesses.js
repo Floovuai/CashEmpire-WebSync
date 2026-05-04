@@ -7,6 +7,8 @@
   const player = window.CashEmpirePlayer;
   const strategy = window.CashEmpireStrategy;
   const MAX_BUSINESSES = 36;
+  const PRODUCTIVITY_TARGET = 1;
+  const RND_PRODUCTIVITY_GAIN = 0.18;
   const MONTHLY_INJECTION_ACTIONS = {
     contribute: { label: "Aporte de capital", min: 1000 },
     inventory: { label: "Insumos", min: 500 },
@@ -102,6 +104,33 @@
 
   function getMonthlyInjectionMeta(action) {
     return MONTHLY_INJECTION_ACTIONS[action] || null;
+  }
+
+  function getRndProductivityGapAmount(business, target = PRODUCTIVITY_TARGET) {
+    const productivity = clamp(Number(business && business.productivity) || 0, 0.1, 1.4);
+    const targetProductivity = clamp(Number(target) || PRODUCTIVITY_TARGET, 0.1, 1.4);
+    if (productivity >= targetProductivity) return 0;
+
+    const valuation = Math.max(1, Number(business && business.valuation) || 0);
+    return roundMoney(Math.ceil(((targetProductivity - productivity) * valuation) / RND_PRODUCTIVITY_GAIN));
+  }
+
+  function getRndProductivityTargetAmount(business) {
+    const gapAmount = getRndProductivityGapAmount(business, PRODUCTIVITY_TARGET);
+    if (gapAmount <= 0) return 0;
+    return roundMoney(Math.max(MONTHLY_INJECTION_ACTIONS.rnd.min, gapAmount));
+  }
+
+  function applyRndInvestment(business, amount) {
+    const valuation = Math.max(1, Number(business && business.valuation) || 0);
+    const targetAmount = getRndProductivityGapAmount(business, PRODUCTIVITY_TARGET);
+    const suggestedTargetAmount = getRndProductivityTargetAmount(business);
+
+    business.rnd = roundMoney(business.rnd + amount * 0.38);
+    business.productivity = targetAmount > 0 && amount >= targetAmount && amount <= suggestedTargetAmount
+      ? PRODUCTIVITY_TARGET
+      : clamp(business.productivity + amount / valuation * RND_PRODUCTIVITY_GAIN, 0.1, 1.4);
+    business.reputation = clamp(business.reputation + amount / valuation * 0.04, 0.05, 1.2);
   }
 
   function normalizeMonthlyInjectionPlan(rawPlan, action) {
@@ -1314,9 +1343,7 @@
         return { ok: false, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} no ejecutado por caja empresarial insuficiente.` };
       }
       business.cash = roundMoney(business.cash - amount);
-      business.rnd = roundMoney(business.rnd + amount * 0.38);
-      business.productivity = clamp(business.productivity + amount / Math.max(1, business.valuation) * 0.18, 0.1, 1.4);
-      business.reputation = clamp(business.reputation + amount / Math.max(1, business.valuation) * 0.04, 0.05, 1.2);
+      applyRndInvestment(business, amount);
       return { ok: true, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} aplicado.` };
     }
 
@@ -1518,12 +1545,10 @@
     }
 
     if (action === "rnd") {
-      const amount = roundMoney(Math.max(250, Number(value) || business.rnd * 0.25 || business.valuation * 0.004));
+      const amount = roundMoney(Math.max(250, Number(value) || getRndProductivityTargetAmount(business) || business.rnd * 0.25 || business.valuation * 0.004));
       if (business.cash < amount) return { ok: false, message: "Caja empresarial insuficiente para I+D." };
       business.cash = roundMoney(business.cash - amount);
-      business.rnd = roundMoney(business.rnd + amount * 0.38);
-      business.productivity = clamp(business.productivity + amount / Math.max(1, business.valuation) * 0.18, 0.1, 1.4);
-      business.reputation = clamp(business.reputation + amount / Math.max(1, business.valuation) * 0.04, 0.05, 1.2);
+      applyRndInvestment(business, amount);
       return { ok: true, message: `I+D reforzado en ${business.name}.` };
     }
 
@@ -1824,6 +1849,7 @@
     createFromAsset,
     foundBusiness,
     getRequiredEmployees,
+    getRndProductivityTargetAmount,
     getSupplySnapshot,
     applyEventImpact,
     processDailyBusinesses,

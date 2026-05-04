@@ -37,6 +37,7 @@
   const openBusinessContributionIds = new Set();
   const openBusinessAmountActions = new Map();
   let messageFilter = "all";
+  const expandedMessageIds = new Set();
   let expandedAlertKey = null;
   let empireMap3d = null;
   let activeEmpireLocationKey = "";
@@ -59,6 +60,45 @@
     milestone: "Hito",
     warning: "Riesgo",
     critical: "Critico"
+  };
+
+  const MESSAGE_BANNER_ASSETS = {
+    macro: {
+      src: "assets/news-banners/macro.svg",
+      alt: "Banner financiero con calendario macro, curva de tasas y graficos de mercado."
+    },
+    market: {
+      src: "assets/news-banners/market.svg",
+      alt: "Banner de mercado con tablero de precios, velas y flujo de capital."
+    },
+    risk: {
+      src: "assets/news-banners/risk.svg",
+      alt: "Banner de riesgo con alerta roja sobre graficos financieros."
+    },
+    opportunity: {
+      src: "assets/news-banners/opportunity.svg",
+      alt: "Banner de oportunidad con grafico ascendente y brillo dorado."
+    },
+    business: {
+      src: "assets/news-banners/business.svg",
+      alt: "Banner empresarial con tienda, caja operativa e inventario."
+    },
+    realestate: {
+      src: "assets/news-banners/real-estate.svg",
+      alt: "Banner inmobiliario con edificios, llave y ocupacion."
+    },
+    crypto: {
+      src: "assets/news-banners/crypto.svg",
+      alt: "Banner cripto con cadena de bloques y precio volatil."
+    },
+    player: {
+      src: "assets/news-banners/player.svg",
+      alt: "Banner personal con perfil de jugador, efectivo y decision estrategica."
+    },
+    neutral: {
+      src: "assets/news-banners/neutral.svg",
+      alt: "Banner de boletin con periodico financiero y tablero neutral."
+    }
   };
 
   const VIEW_LABELS = {
@@ -655,6 +695,22 @@
       .trim();
   }
 
+  function normalizeTextList(value, limit) {
+    const maxItems = Math.max(1, Math.floor(Number(limit) || 6));
+    return Array.isArray(value)
+      ? value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+        .slice(0, maxItems)
+      : [];
+  }
+
+  function clampText(value, maxLength) {
+    const text = String(value || "").trim();
+    const limit = Math.max(1, Math.floor(Number(maxLength) || text.length || 1));
+    return text.length > limit ? `${text.slice(0, limit - 1).trim()}...` : text;
+  }
+
   function titleCase(value) {
     const text = String(value || "");
     return text.charAt(0).toUpperCase() + text.slice(1);
@@ -896,6 +952,15 @@
       actionHint: typeof message.actionHint === "string" ? message.actionHint.trim().slice(0, 160) : "",
       title: String(message.title || "Mensaje del juego"),
       body: String(message.body || ""),
+      sourceNewsId: typeof message.sourceNewsId === "string" && message.sourceNewsId ? message.sourceNewsId : null,
+      newsLevel: typeof message.newsLevel === "string" && message.newsLevel ? message.newsLevel : "",
+      newsTitle: clampText(message.newsTitle || "", 120),
+      newsSummary: clampText(getPublicNewsSummary(message.newsSummary || ""), 420),
+      newsAffected: normalizeTextList(message.newsAffected, 8),
+      newsDelta: Number.isFinite(Number(message.newsDelta)) ? Number(message.newsDelta) : null,
+      newsDuration: Math.max(0, Math.floor(Number(message.newsDuration) || 0)),
+      newsImpact: clampText(message.newsImpact || "", 240),
+      bannerKey: MESSAGE_BANNER_ASSETS[message.bannerKey] ? message.bannerKey : pickMessageBannerKey(message),
       createdAt: new Date().toISOString(),
       read: Boolean(message.read)
     };
@@ -934,6 +999,134 @@
     renderMessages();
   }
 
+  function getNewsLevelLabel(level) {
+    const labels = {
+      macro: "Macro",
+      sector: "Sector",
+      individual: "Activo",
+      business: "Empresa",
+      cyclic: "Ciclo",
+      info: "Boletin",
+      player: "Jugador"
+    };
+    return labels[level] || "Noticia";
+  }
+
+  function pickMessageBannerKey(source) {
+    const explicitKey = source && typeof source.bannerKey === "string" ? source.bannerKey : "";
+    if (MESSAGE_BANNER_ASSETS[explicitKey]) return explicitKey;
+
+    const affected = normalizeTextList(source && (source.newsAffected || source.affected), 8).join(" ");
+    const text = `${source && source.title ? source.title : ""} ${source && source.body ? source.body : ""} ${source && source.summary ? source.summary : ""} ${source && source.newsSummary ? source.newsSummary : ""} ${affected}`.toLowerCase();
+    const level = source && (source.newsLevel || source.level);
+    const category = source && source.category;
+    const severity = source && source.severity;
+    const scope = source && source.scope;
+
+    if (level === "player" || text.includes("jugador") || text.includes("personal")) return "player";
+    if (scope === "business" || category === "business" || text.includes("empresa") || text.includes("proveedor") || text.includes("inventario") || text.includes("retail")) return "business";
+    if (text.includes("crypto") || text.includes("cripto") || text.includes("btc") || text.includes("token") || text.includes("exchange")) return "crypto";
+    if (text.includes("renta") || text.includes("propiedad") || text.includes("inmueble") || text.includes("hipotec") || text.includes("hotel")) return "realestate";
+    if (severity === "critical" || severity === "warning" || category === "critical" || category === "warning") return "risk";
+    if (severity === "opportunity" || category === "bonus" || category === "milestone") return "opportunity";
+    if (level === "macro" || level === "cyclic") return "macro";
+    if (level === "sector" || level === "individual") return "market";
+    return "neutral";
+  }
+
+  function resolveMessageNews(message) {
+    if (!message || !state || !Array.isArray(state.events)) return null;
+    const newsId = message.sourceNewsId || message.newsId;
+    if (!newsId) return null;
+    return state.events.find((item) => item && item.id === newsId) || null;
+  }
+
+  function getMessageNewsContext(message) {
+    const news = resolveMessageNews(message);
+    const level = message.newsLevel || (news && news.level) || "";
+    const affected = normalizeTextList(
+      message.newsAffected && message.newsAffected.length ? message.newsAffected : news && news.affected,
+      8
+    );
+    const rawDelta = Number(message.newsDelta ?? (news && news.delta));
+    const hasDelta = Number.isFinite(rawDelta) && rawDelta !== 0;
+    const duration = Math.max(0, Math.floor(Number(message.newsDuration ?? (news && news.duration)) || 0));
+    const impactText = message.newsImpact
+      || (hasDelta ? `Impacto de precio ${formatSignedPercent(rawDelta)}${duration ? ` durante ${duration} dias` : ""}.` : "");
+    const summary = getPublicNewsSummary(message.newsSummary || (news && news.summary) || message.body || "");
+
+    return {
+      news,
+      level,
+      levelLabel: getNewsLevelLabel(level),
+      title: message.newsTitle || (news && news.title) || message.title || "Noticia",
+      summary,
+      affected,
+      impactText,
+      duration,
+      delta: hasDelta ? rawDelta : null
+    };
+  }
+
+  function getNewsMessageCategory(news) {
+    if (!news) return "system";
+    if (news.level === "business") return "business";
+    if (news.severity === "critical") return "critical";
+    if (news.severity === "warning") return "warning";
+    if (news.severity === "opportunity") return "milestone";
+    return "system";
+  }
+
+  function getNewsActionHint(news) {
+    if (!news) return "";
+    if (news.level === "business" || (Array.isArray(news.businessImpactDetails) && news.businessImpactDetails.length)) {
+      return "Revisa Empresas y caja operativa antes de avanzar tiempo.";
+    }
+    if (news.level === "player") return "Revisa efectivo, deuda y proximos compromisos.";
+    if (news.severity === "critical" || news.severity === "warning") return "Evalua coberturas, liquidez y concentracion.";
+    if (news.severity === "opportunity") return "Compara activos afectados antes de comprar.";
+    return "Lee impacto y afectados antes de cerrar el turno.";
+  }
+
+  function pushNewsMessage(news) {
+    if (!news || !news.id) return null;
+    const summary = getPublicNewsSummary(news.summary);
+    const affected = normalizeTextList(news.affected, 8);
+    const duration = Math.max(0, Math.floor(Number(news.duration) || 0));
+    const delta = Number(news.delta) || 0;
+    const impactParts = [];
+    if (delta !== 0) impactParts.push(`Movimiento inmediato ${formatSignedPercent(delta)}.`);
+    if (duration > 1) impactParts.push(`Efecto activo ${duration} dias.`);
+    if (affected.length) impactParts.push(`Afecta: ${affected.join(", ")}.`);
+
+    return pushMessage({
+      key: `news:${news.id}`,
+      category: getNewsMessageCategory(news),
+      scope: news.level === "business" ? "business" : "news",
+      severity: news.severity || "info",
+      title: news.title || "Noticia",
+      body: summary,
+      actionHint: getNewsActionHint(news),
+      sourceNewsId: news.id,
+      newsLevel: news.level || "",
+      newsTitle: news.title || "",
+      newsSummary: summary,
+      newsAffected: affected,
+      newsDelta: delta,
+      newsDuration: duration,
+      newsImpact: impactParts.join(" "),
+      bannerKey: pickMessageBannerKey(news)
+    });
+  }
+
+  function syncNewsMessages() {
+    if (!state || !Array.isArray(state.events)) return;
+    state.events
+      .filter((news) => news && !news.read)
+      .slice(-18)
+      .forEach((news) => pushNewsMessage(news));
+  }
+
   function pushBusinessPulseMessage(message) {
     const item = pushMessage({
       key: message.key,
@@ -944,7 +1137,8 @@
       severity: message.severity || "info",
       title: message.title,
       body: message.body,
-      actionHint: message.actionHint
+      actionHint: message.actionHint,
+      bannerKey: "business"
     });
     return item;
   }
@@ -972,26 +1166,99 @@
     updateMessageFilterButtons();
 
     filteredItems.slice(0, 14).forEach((message) => {
+      const context = getMessageNewsContext(message);
+      const isExpanded = expandedMessageIds.has(message.id);
+      const bannerKey = pickMessageBannerKey({ ...message, ...context.news, newsAffected: context.affected, newsSummary: context.summary });
+      const banner = MESSAGE_BANNER_ASSETS[bannerKey] || MESSAGE_BANNER_ASSETS.neutral;
+      const metaLabel = `Dia ${message.day || 1} / ${MESSAGE_CATEGORY_LABELS[message.category] || MESSAGE_CATEGORY_LABELS.system}${message.businessName ? ` / ${message.businessName}` : ""}`;
+      const affectedHtml = context.affected.length
+        ? `<div class="message-detail-section"><span>Afectados</span><p>${context.affected.map((item) => `<b>${escapeHtml(item)}</b>`).join(" ")}</p></div>`
+        : "";
+      const impactHtml = context.impactText
+        ? `<div class="message-detail-section"><span>Impacto</span><p>${escapeHtml(context.impactText)}</p></div>`
+        : "";
+      const actionHtml = message.actionHint
+        ? `<div class="message-detail-section message-detail-action"><span>Gestion sugerida</span><p>${escapeHtml(message.actionHint)}</p></div>`
+        : "";
+      const newsButtonHtml = message.sourceNewsId
+        ? `<button class="btn btn-secondary btn-small message-open-news" type="button" data-message-open-news="${escapeHtml(message.sourceNewsId)}" data-message-id="${escapeHtml(message.id)}">Ver en Noticias</button>`
+        : "";
       const item = document.createElement("article");
-      item.className = `message-item ${message.category || "system"} ${message.severity || "info"} ${message.read ? "read" : "unread"}`.trim();
-
-      const meta = document.createElement("span");
-      meta.textContent = `Dia ${message.day || 1} / ${MESSAGE_CATEGORY_LABELS[message.category] || MESSAGE_CATEGORY_LABELS.system}${message.businessName ? ` / ${message.businessName}` : ""}`;
-      const title = document.createElement("strong");
-      title.textContent = message.title;
-      const body = document.createElement("small");
-      body.textContent = message.body;
-      item.append(meta, title, body);
-
-      if (message.actionHint) {
-        const action = document.createElement("small");
-        action.className = "message-action-hint";
-        action.textContent = `Gestion sugerida: ${message.actionHint}`;
-        item.appendChild(action);
-      }
+      item.className = `message-item ${message.category || "system"} ${message.severity || "info"} ${message.read ? "read" : "unread"} ${isExpanded ? "expanded" : ""}`.trim();
+      item.innerHTML = `
+        <button class="message-toggle" type="button" data-message-toggle="${escapeHtml(message.id)}" data-news-id="${escapeHtml(message.sourceNewsId || "")}" aria-expanded="${isExpanded ? "true" : "false"}">
+          <span>${escapeHtml(metaLabel)}</span>
+          <strong>${escapeHtml(message.title)}</strong>
+          <small>${escapeHtml(clampText(message.body || context.summary, 150))}</small>
+          <i aria-hidden="true"></i>
+        </button>
+        <div class="message-detail" ${isExpanded ? "" : "hidden"}>
+          <div class="message-detail-banner">
+            <img src="${escapeHtml(banner.src)}" alt="${escapeHtml(banner.alt)}" loading="lazy" width="640" height="220" />
+          </div>
+          <div class="message-detail-copy">
+            <span>${escapeHtml(context.levelLabel)}</span>
+            <h4>${escapeHtml(context.title)}</h4>
+            <p>${escapeHtml(context.summary || message.body || "Sin detalle adicional.")}</p>
+          </div>
+          <div class="message-detail-grid">
+            ${impactHtml}
+            ${affectedHtml}
+            ${actionHtml}
+          </div>
+          ${newsButtonHtml}
+        </div>
+      `;
 
       els.messageList.appendChild(item);
     });
+  }
+
+  function markMessageAndNewsRead(messageId, newsId) {
+    if (!state || !messageId) return;
+    const messages = ensureMessageState();
+    let changed = false;
+    messages.items = messages.items.map((item) => {
+      if (item.id !== messageId || item.read) return item;
+      changed = true;
+      return { ...item, read: true };
+    });
+
+    if (newsId && events && typeof events.markRead === "function") {
+      const news = Array.isArray(state.events) ? state.events.find((item) => item && item.id === newsId) : null;
+      if (news && !news.read) changed = true;
+      events.markRead(state, newsId);
+    }
+
+    if (!changed) return;
+
+    try {
+      state = storage.save(state, currentSlot);
+      updateLoadButton();
+      renderNews();
+    } catch (error) {
+      console.error(error);
+      showToast("No se pudo guardar la lectura del mensaje.", "error");
+    }
+  }
+
+  function handleMessageListClick(event) {
+    const newsButton = event.target.closest("[data-message-open-news]");
+    if (newsButton) {
+      markMessageAndNewsRead(newsButton.dataset.messageId, newsButton.dataset.messageOpenNews);
+      setActiveView("news");
+      closeMessageCenter();
+      return;
+    }
+
+    const toggle = event.target.closest("[data-message-toggle]");
+    if (!toggle) return;
+    const messageId = toggle.dataset.messageToggle;
+    const willExpand = !expandedMessageIds.has(messageId);
+    if (willExpand) expandedMessageIds.add(messageId);
+    else expandedMessageIds.delete(messageId);
+    if (willExpand) markMessageAndNewsRead(messageId, toggle.dataset.newsId);
+    renderMessages();
   }
 
   function toggleMessageCenter() {
@@ -1011,7 +1278,13 @@
   function markMessagesRead() {
     if (!state) return;
     const messages = ensureMessageState();
+    const linkedNewsIds = messages.items
+      .map((item) => item.sourceNewsId)
+      .filter(Boolean);
     messages.items = messages.items.map((item) => ({ ...item, read: true }));
+    if (events && typeof events.markRead === "function") {
+      linkedNewsIds.forEach((newsId) => events.markRead(state, newsId));
+    }
     try {
       state = storage.save(state, currentSlot);
       render();
@@ -1087,11 +1360,14 @@
     if (!state) return;
     getAlerts().forEach((alert) => {
       const severity = alert.severity === "critical" ? "critical" : "warning";
+      const presentation = getAlertPresentation(alert);
       pushMessage({
         key: `alert:${state.time.day}:${severity}:${alert.text}`,
         category: severity,
-        title: severity === "critical" ? "Riesgo critico" : "Alerta del juego",
-        body: alert.text
+        title: presentation.title,
+        body: presentation.detail || alert.text,
+        actionHint: alert.actionLabel ? `Abrir ${alert.actionLabel}.` : "",
+        bannerKey: "risk"
       });
     });
   }
@@ -1386,7 +1662,18 @@
     if (state.macro && state.macro.phase === "recession") alerts.push({ severity: "warning", text: "Recesion activa: activos ciclicos y negocios tendran menor demanda.", view: "news", actionLabel: "Noticias" });
     if (maxAllocation > 0.55) alerts.push({ severity: "warning", text: "Concentracion elevada: diversificar reduce volatilidad.", view: "market", actionLabel: "Mercado" });
     businessSummary.alerts.forEach((alert) => alerts.push(alert));
-    if (state.events && state.events.some((item) => !item.read && item.severity === "critical")) alerts.push({ severity: "critical", text: "Hay una noticia critica sin leer.", view: "news", actionLabel: "Leer" });
+    const criticalNews = Array.isArray(state.events)
+      ? state.events.slice().reverse().find((item) => item && !item.read && item.severity === "critical")
+      : null;
+    if (criticalNews) {
+      const detail = getPublicNewsSummary(criticalNews.summary);
+      alerts.push({
+        severity: "critical",
+        text: `Noticia critica: ${criticalNews.title}${detail ? `. ${detail}` : ""}`,
+        view: "news",
+        actionLabel: "Leer"
+      });
+    }
     if (strategy && typeof strategy.getRiskProfile === "function") {
       strategy.getRiskProfile(state).alerts.forEach((alert) => alerts.push(alert));
     }
@@ -3162,6 +3449,9 @@
     const supply = businesses && typeof businesses.getSupplySnapshot === "function"
       ? businesses.getSupplySnapshot(business)
       : null;
+    const rndTargetAmount = businesses && typeof businesses.getRndProductivityTargetAmount === "function"
+      ? businesses.getRndProductivityTargetAmount(business)
+      : 0;
     const configs = {
       marketing: {
         label: "Marketing",
@@ -3191,7 +3481,9 @@
         min: 250,
         step: 50,
         buttonLabel: "Invertir en I+D",
-        value: getSuggestedAmount(Number(business.rnd || 0) * 0.25 || Number(business.valuation || 0) * 0.004, businessCash, 250)
+        value: rndTargetAmount > 0
+          ? String(Math.round(rndTargetAmount))
+          : getSuggestedAmount(Number(business.rnd || 0) * 0.25 || Number(business.valuation || 0) * 0.004, businessCash, 250)
       },
       supplier_credit: {
         label: "Credito proveedor",
@@ -4185,6 +4477,7 @@
     const macro = ensureMacro();
     const assets = ensureAssets();
     ensureExtendedState();
+    syncNewsMessages();
 
     els.hudPlayerName.textContent = state.player.name;
     renderPlayerAvatar();
@@ -4550,6 +4843,7 @@
         });
       }
       handleAchievementUnlocks();
+      syncNewsMessages();
       syncAlertMessages();
       state = storage.save(state, slot || currentSlot);
       render({ skipChrono: Boolean(options && options.chronoFrom) });
@@ -5508,6 +5802,7 @@
     if (els.messageButton) els.messageButton.addEventListener("click", toggleMessageCenter);
     if (els.messageMarkRead) els.messageMarkRead.addEventListener("click", markMessagesRead);
     if (els.messageDeleteRead) els.messageDeleteRead.addEventListener("click", deleteReadMessages);
+    if (els.messageList) els.messageList.addEventListener("click", handleMessageListClick);
     if (els.messageFilters) {
       els.messageFilters.forEach((button) => {
         button.addEventListener("click", () => setMessageFilter(button.dataset.messageFilter));
@@ -5613,6 +5908,10 @@
       const button = event.target.closest("[data-news-id]");
       if (!button || !events) return;
       events.markRead(state, button.dataset.newsId);
+      const messages = ensureMessageState();
+      messages.items = messages.items.map((item) => (
+        item.sourceNewsId === button.dataset.newsId ? { ...item, read: true } : item
+      ));
       persist("Noticia marcada como leida.");
     });
 

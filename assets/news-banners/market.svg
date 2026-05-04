@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title desc">
+  <title id="title">Banner de mercado</title>
+  <desc id="desc">Pantalla de trading con velas, volumen y flujo de precios.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071118"/>
+      <stop offset="0.48" stop-color="#0e1c1b"/>
+      <stop offset="1" stop-color="#111510"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="220" fill="url(#bg)"/>
+  <g stroke="#72f8e0" stroke-width="1" opacity="0.18">
+    <path d="M0 44h640M0 88h640M0 132h640M0 176h640M64 0v220M128 0v220M192 0v220M256 0v220M320 0v220M384 0v220M448 0v220M512 0v220M576 0v220"/>
+  </g>
+  <g transform="translate(50 30)">
+    <rect width="540" height="160" rx="8" fill="#05080d" stroke="#68a7ff" opacity="0.9"/>
+    <path d="M24 126 82 98l56 18 58-62 62 32 66-44 54 56 70-72 68 34" fill="none" stroke="#f4c44e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 142 82 122l56 10 58-34 62 14 66-22 54 28 70-38 68 16" fill="none" stroke="#2fffd1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <g stroke-width="5" stroke-linecap="round">
+      <path d="M64 54v64M52 78h24" stroke="#2fffd1"/>
+      <path d="M134 42v70M122 68h24" stroke="#ff5f7d"/>
+      <path d="M214 36v96M202 88h24" stroke="#2fffd1"/>
+      <path d="M304 58v78M292 104h24" stroke="#f4c44e"/>
+      <path d="M402 40v86M390 72h24" stroke="#2fffd1"/>
+      <path d="M486 62v60M474 96h24" stroke="#ff5f7d"/>
+    </g>
+  </g>
+  <g font-family="Consolas, monospace" font-weight="900">
+    <text x="72" y="70" fill="#a8b7b4" font-size="18">MERCADO</text>
+    <text x="72" y="98" fill="#2fffd1" font-size="24">VOL +12%</text>
+  </g>
+</svg>

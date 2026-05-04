@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-labelledby="title desc">
+  <title id="title">Banner de oportunidad</title>
+  <desc id="desc">Grafico ascendente, objetivo dorado y ventana de inversion.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07120f"/>
+      <stop offset="0.5" stop-color="#10211a"/>
+      <stop offset="1" stop-color="#221a09"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="220" fill="url(#bg)"/>
+  <g opacity="0.2" stroke="#72f8e0">
+    <path d="M0 55h640M0 110h640M0 165h640M80 0v220M160 0v220M240 0v220M320 0v220M400 0v220M480 0v220M560 0v220"/>
+  </g>
+  <g transform="translate(62 44)">
+    <path d="M0 118 78 104l58-40 64 18 78-62 60 28 82-42" fill="none" stroke="#2fffd1" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M404 8h64v64" fill="none" stroke="#f4c44e" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M404 72 468 8" stroke="#f4c44e" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(418 88)">
+    <rect width="148" height="72" rx="8" fill="#071016" stroke="#f4c44e"/>
+    <text x="16" y="30" fill="#a8b7b4" font-family="Consolas, monospace" font-size="15" font-weight="700">VENTANA</text>
+    <text x="16" y="56" fill="#f4c44e" font-family="Consolas, monospace" font-size="24" font-weight="900">ABIERTA</text>
+  </g>
+</svg>
