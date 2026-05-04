@@ -962,6 +962,18 @@
     state.businesses = normalizeBusinesses(state.businesses);
 
     const startupUnits = [normalizeUnit({ name: defaults.unitType, rent: Math.max(650, capital * 0.012) }, sector)];
+    const requiredEmployees = getRequiredEmployees({ sector, units: startupUnits });
+    const salaryPerEmployee = getStartupSalaryPerEmployee(sector);
+    const launchEmployees = Math.max(1, Math.min(requiredEmployees, Math.ceil(requiredEmployees * 0.4)));
+    const setupCost = roundMoney(Math.max(1200, capital * 0.06));
+    const marketingBudget = roundMoney(getStartupMarketingBudget(sector, capital));
+    const rndBudget = roundMoney(getStartupRndBudget(sector, capital));
+    const inventoryBudget = roundMoney(capital * (sector === "software" ? 0.12 : sector === "food" ? 0.2 : 0.18));
+    const payrollReserve = roundMoney(launchEmployees * salaryPerEmployee * 0.45);
+    const upfrontCommitment = roundMoney(setupCost + marketingBudget + rndBudget + inventoryBudget + payrollReserve);
+    const startupCash = roundMoney(Math.max(1500, capital - upfrontCommitment));
+    const seedValuation = roundMoney(Math.max(capital * 0.68, capital - setupCost * 0.7 - payrollReserve * 0.35));
+    const valuation = roundMoney(Math.max(seedValuation, capital - setupCost * 0.42));
     const business = normalizeBusiness({
       id: createId("biz"),
       sourceAssetId: null,
@@ -969,19 +981,19 @@
       type: "startup",
       sector,
       sectorLabel: defaults.label,
-      cash: capital,
-      valuation: capital,
-      seedValuation: capital,
-      employees: 0,
-      requiredEmployees: getRequiredEmployees({ sector, units: startupUnits }),
-      salaryPerEmployee: getStartupSalaryPerEmployee(sector),
+      cash: startupCash,
+      valuation,
+      seedValuation,
+      employees: launchEmployees,
+      requiredEmployees,
+      salaryPerEmployee,
       morale: 0.78,
       productivity: 0.72,
       reputation: 0.42,
-      marketing: getStartupMarketingBudget(sector, capital),
-      rnd: getStartupRndBudget(sector, capital),
+      marketing: marketingBudget,
+      rnd: rndBudget,
       priceIndex: 1,
-      inventory: roundMoney(capital * (sector === "software" ? 0.12 : sector === "food" ? 0.2 : 0.18)),
+      inventory: inventoryBudget,
       suppliersReliability: 0.74,
       suppliers: createDefaultSuppliers(sector),
       units: startupUnits
@@ -1056,7 +1068,9 @@
     const pricePenalty = business.priceIndex > 1.12 ? 1 - (business.priceIndex - 1.12) * 0.9 : 1 + (1 - business.priceIndex) * 0.14;
     const supplyFactor = clamp(0.62 + supplierScores.reliability * 0.36 + supplierQuality * 0.06, 0.65, 1.08);
     const randomFactor = 0.94 + Math.random() * 0.14;
-    const matureOperatorBoost = business.type === "startup" && business.employees <= 0 ? 0.82 : 1.06;
+    const matureOperatorBoost = business.type === "startup"
+      ? clamp(0.84 + staffCapacity * 0.16 + business.reputation * 0.04, 0.82, 1.02)
+      : 1.03;
     const eventRevenueFactor = clamp(
       1 +
       (Number(impact.business && impact.business.revenueDelta) || 0) +

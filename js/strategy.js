@@ -147,6 +147,20 @@
     "hedge"
   ];
 
+  const CONTRACT_REWARD_MULTIPLIERS = {
+    first_buy: 1.2,
+    watchlist: 0.42,
+    diversify: 1.08,
+    cash_guard: 0.36,
+    risk_guard: 0.44,
+    read_news: 0.22,
+    business_health: 1.04,
+    hedge: 0.9
+  };
+
+  const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
+  const SUPPORT_CONTRACTS = new Set(["watchlist"]);
+
   function isObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
   }
@@ -467,6 +481,65 @@
       }, { count: 0, net: 0, operating: 0, financing: 0, investing: 0, internal: 0, windfall: 0 });
   }
 
+  function getContractMetrics(state) {
+    const positions = getPortfolioPositions(state);
+    const strategyState = ensureStrategy(state);
+    const categories = new Set(positions.map((position) => position.asset && position.asset.type).filter(Boolean));
+    const businesses = Array.isArray(state.businesses) ? state.businesses : [];
+    const netWorth = Math.max(1, Number(state.player && state.player.netWorth) || Number(state.player && state.player.cash) || 1);
+    const cash = Math.max(0, Number(state.player && state.player.cash) || 0);
+    const unread = Array.isArray(state.events) ? state.events.filter((item) => !item.read).length : 0;
+    const riskScore = getRiskProfile(state).score;
+    const debtCount = Array.isArray(state.debts)
+      ? state.debts.filter((debt) => debt && (Number(debt.balance) || 0) > 0).length
+      : 0;
+    const investedValue = Math.max(0, netWorth - cash);
+    const cashRatio = cash / netWorth;
+    const investedRatio = investedValue / netWorth;
+    const businessStress = businesses.some((business) => {
+      const pnl = Number(business.monthlyPnl && business.monthlyPnl.cashFlow) || 0;
+      const morale = Number(business.morale) || 0;
+      const coverage = Number(business.monthlyPnl && business.monthlyPnl.supplyCoverageMonths);
+      return pnl < -1000 || morale < 0.42 || (Number.isFinite(coverage) && coverage < 0.75);
+    });
+
+    return {
+      positions,
+      businesses,
+      categories,
+      netWorth,
+      cash,
+      unread,
+      riskScore,
+      debtCount,
+      cashRatio,
+      investedRatio,
+      watchlistCount: strategyState.watchlist.length,
+      hasBusiness: businesses.length > 0,
+      hasHedge: strategyState.activeHedges.length > 0,
+      businessStress
+    };
+  }
+
+  function getRecentDecisionSummary(state, daysBack) {
+    const currentDay = state && state.time && state.time.day ? state.time.day : 1;
+    const startDay = Math.max(1, currentDay - Math.max(1, Math.floor(Number(daysBack) || 7)) + 1);
+    const strategyState = ensureStrategy(state);
+    const transactionCount = Array.isArray(state.transactions)
+      ? state.transactions.filter((item) => item && (Number(item.day) || 0) >= startDay).length
+      : 0;
+    const hedgeCount = strategyState.activeHedges.filter((hedge) => (Number(hedge.createdDay) || 0) >= startDay).length;
+    const newBusinessCount = Array.isArray(state.businesses)
+      ? state.businesses.filter((business) => (Number(business.createdDay) || 0) >= startDay).length
+      : 0;
+    return {
+      transactionCount,
+      hedgeCount,
+      newBusinessCount,
+      activeDecisions: transactionCount + hedgeCount + newBusinessCount
+    };
+  }
+
   function getRiskProfile(state) {
     if (!state || !state.player) {
       return { score: 0, label: "Sin datos", severity: "info", drivers: [], alerts: [] };
@@ -662,7 +735,8 @@
   }
 
   function makeContract(state, kind, week, index) {
-    const netWorth = Math.max(1, Number(state.player && state.player.netWorth) || 1);
+    const metrics = getContractMetrics(state);
+    const netWorth = metrics.netWorth;
     const difficulty = state && state.player && state.player.difficulty ? state.player.difficulty : "normal";
     const difficultyRewardMultiplier = {
       facil: 0.92,
@@ -670,10 +744,11 @@
       dificil: 1.08,
       pesadilla: 1.16
     }[difficulty] || 1;
+    const recent = getRecentDecisionSummary(state, 7);
     const scaledReward = 90 + Math.sqrt(netWorth) * 0.08 + week * 2.5 + index * 55;
     const rewardCap = Math.max(320, netWorth * 0.0008);
     const baseReward = Math.round(Math.min(rewardCap, scaledReward) * difficultyRewardMultiplier);
-    const rewardPower = index === 0 ? 2 : 1;
+    const basePower = index === 0 ? 2 : 1;
     const map = {
       first_buy: {
         title: "Ejecuta una compra",
@@ -683,22 +758,22 @@
       watchlist: {
         title: "Arma vigilancia",
         body: "Marca 3 activos en vigilancia para comparar oportunidades.",
-        target: 3
+        target: Math.min(6, Math.max(3, metrics.watchlistCount + 2))
       },
       diversify: {
         title: "Diversifica rubros",
         body: "Mantiene exposicion en 3 categorias de activos.",
-        target: 3
+        target: Math.min(4, Math.max(3, metrics.categories.size + 1))
       },
       cash_guard: {
         title: "Reserva de caja",
         body: "Conserva al menos 8% del patrimonio en efectivo.",
-        target: 8
+        target: Math.min(16, Math.max(8, Math.ceil(metrics.cashRatio * 100) + 4))
       },
       risk_guard: {
         title: "Riesgo bajo control",
         body: "Cierra el turno con radar de riesgo en 55 o menos.",
-        target: 55
+        target: Math.max(26, Math.min(55, Math.floor(metrics.riskScore - 8)))
       },
       read_news: {
         title: "Mesa informada",
@@ -717,6 +792,18 @@
       }
     };
     const template = map[kind] || map.cash_guard;
+    let rewardMultiplier = CONTRACT_REWARD_MULTIPLIERS[kind] || 0.5;
+    let rewardPower = basePower;
+
+    if (PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
+      const hasEconomicExposure = metrics.positions.length > 0 || metrics.hasBusiness || metrics.debtCount > 0;
+      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.7 : 0;
+      rewardPower = Math.max(1, rewardPower - 1);
+    } else if (SUPPORT_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
+      rewardMultiplier *= metrics.positions.length > 0 || metrics.hasBusiness ? 1 : 0.45;
+    }
+
+    const rewardCash = Math.max(0, Math.round(baseReward * rewardMultiplier));
 
     return {
       id: `w${week}_${kind}`,
@@ -725,57 +812,88 @@
       body: template.body,
       target: template.target,
       progress: 0,
-      rewardCash: baseReward,
+      rewardCash,
       rewardPower,
       done: false
     };
   }
 
+  function isContractAllowed(state, kind, metrics) {
+    switch (kind) {
+      case "first_buy":
+        return metrics.positions.length === 0;
+      case "watchlist":
+        return metrics.watchlistCount < 6;
+      case "diversify":
+        return metrics.positions.length > 0 && metrics.categories.size < 4;
+      case "cash_guard":
+        return metrics.positions.length > 0 && metrics.investedRatio > 0.18 && metrics.cashRatio < 0.16;
+      case "risk_guard":
+        return (metrics.positions.length > 0 || metrics.debtCount > 0 || metrics.hasBusiness) && metrics.riskScore > 38;
+      case "read_news":
+        return metrics.unread > 0 && (metrics.positions.length > 0 || metrics.hasBusiness);
+      case "business_health":
+        return metrics.hasBusiness && metrics.businessStress;
+      case "hedge":
+        return (metrics.positions.length > 0 || metrics.hasBusiness) && !metrics.hasHedge && metrics.cash >= 350;
+      default:
+        return false;
+    }
+  }
+
+  function pushUniqueContractKind(selected, kind, state, metrics) {
+    if (!kind || selected.includes(kind) || !isContractAllowed(state, kind, metrics)) return;
+    selected.push(kind);
+  }
+
   function generateWeeklyContracts(state) {
     const week = getWeek(state);
-    const positions = getPortfolioPositions(state);
-    const hasBusiness = Array.isArray(state.businesses) && state.businesses.length > 0;
+    const metrics = getContractMetrics(state);
     const selected = [];
 
-    selected.push(positions.length ? "diversify" : "first_buy");
-    selected.push("watchlist");
-    selected.push(hasBusiness ? "business_health" : "cash_guard");
+    pushUniqueContractKind(selected, metrics.positions.length ? "diversify" : "first_buy", state, metrics);
+    pushUniqueContractKind(selected, metrics.watchlistCount < 3 ? "watchlist" : metrics.unread > 0 ? "read_news" : "risk_guard", state, metrics);
+    pushUniqueContractKind(selected, metrics.hasBusiness ? "business_health" : metrics.hasHedge ? "risk_guard" : "hedge", state, metrics);
 
     const extraKind = CONTRACT_ROTATION[week % CONTRACT_ROTATION.length];
-    if (!selected.includes(extraKind)) selected[2] = extraKind;
+    pushUniqueContractKind(selected, extraKind, state, metrics);
+
+    [
+      "first_buy",
+      "diversify",
+      "watchlist",
+      "hedge",
+      "business_health",
+      "risk_guard",
+      "cash_guard",
+      "read_news"
+    ].forEach((kind) => {
+      if (selected.length >= 3) return;
+      pushUniqueContractKind(selected, kind, state, metrics);
+    });
 
     return selected.map((kind, index) => makeContract(state, kind, week, index));
   }
 
   function getContractProgress(state, contract) {
-    const positions = getPortfolioPositions(state);
+    const metrics = getContractMetrics(state);
     const strategy = ensureStrategy(state);
-    const categories = new Set(positions.map((position) => position.asset && position.asset.type).filter(Boolean));
-    const cashRatio = ((state.player && state.player.cash) || 0) / Math.max(1, (state.player && state.player.netWorth) || 1);
-    const unread = Array.isArray(state.events) ? state.events.filter((item) => !item.read).length : 0;
-    const businesses = Array.isArray(state.businesses) ? state.businesses : [];
 
     switch (contract.kind) {
       case "first_buy":
-        return positions.length > 0 ? 1 : 0;
+        return metrics.positions.length > 0 ? 1 : 0;
       case "watchlist":
         return Math.min(contract.target, strategy.watchlist.length);
       case "diversify":
-        return Math.min(contract.target, categories.size);
+        return Math.min(contract.target, metrics.categories.size);
       case "cash_guard":
-        return Math.min(contract.target, Math.round(cashRatio * 100));
+        return Math.min(contract.target, Math.round(metrics.cashRatio * 100));
       case "risk_guard":
         return Math.max(0, contract.target - Math.max(0, getRiskProfile(state).score - contract.target));
       case "read_news":
-        return unread === 0 ? 1 : 0;
+        return metrics.unread === 0 ? 1 : 0;
       case "business_health":
-        if (!businesses.length) return 0;
-        return businesses.some((business) => {
-          const pnl = Number(business.monthlyPnl && business.monthlyPnl.cashFlow) || 0;
-          const morale = Number(business.morale) || 0;
-          const coverage = Number(business.monthlyPnl && business.monthlyPnl.supplyCoverageMonths);
-          return pnl < -1000 || morale < 0.35 || (Number.isFinite(coverage) && coverage < 0.4);
-        }) ? 0 : 1;
+        return metrics.hasBusiness && !metrics.businessStress ? 1 : 0;
       case "hedge":
         return strategy.activeHedges.length > 0 ? 1 : 0;
       default:
