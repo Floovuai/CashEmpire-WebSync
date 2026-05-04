@@ -379,6 +379,7 @@
       return {
         label: "Sin influencia",
         stage: "none",
+        influence: 0,
         demand: 1,
         cost: 1,
         valuation: 1
@@ -389,6 +390,7 @@
       return {
         label: "Sin influencia",
         stage: "none",
+        influence: 0,
         demand: 1,
         cost: 1,
         valuation: 1
@@ -397,6 +399,9 @@
     return {
       label: claim.stageLabel,
       stage: claim.stage,
+      influence: Number(claim.influence) || 0,
+      assetId: claim.assetId,
+      ticker: claim.ticker || "",
       demand: claim.businessDemand,
       cost: claim.businessCost,
       valuation: claim.businessValuation
@@ -658,7 +663,16 @@
 
   function makeContract(state, kind, week, index) {
     const netWorth = Math.max(1, Number(state.player && state.player.netWorth) || 1);
-    const baseReward = Math.round(35 + Math.min(110, Math.sqrt(netWorth) * 0.035) + week * 1.2);
+    const difficulty = state && state.player && state.player.difficulty ? state.player.difficulty : "normal";
+    const difficultyRewardMultiplier = {
+      facil: 0.92,
+      normal: 1,
+      dificil: 1.08,
+      pesadilla: 1.16
+    }[difficulty] || 1;
+    const scaledReward = 90 + Math.sqrt(netWorth) * 0.08 + week * 2.5 + index * 55;
+    const rewardCap = Math.max(320, netWorth * 0.0008);
+    const baseReward = Math.round(Math.min(rewardCap, scaledReward) * difficultyRewardMultiplier);
     const rewardPower = index === 0 ? 2 : 1;
     const map = {
       first_buy: {
@@ -711,7 +725,7 @@
       body: template.body,
       target: template.target,
       progress: 0,
-      rewardCash: baseReward + index * 55,
+      rewardCash: baseReward,
       rewardPower,
       done: false
     };

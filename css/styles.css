@@ -3684,6 +3684,101 @@ input[data-money-input] {
   overflow-wrap: anywhere;
 }
 
+.business-strategy-panel {
+  display: grid;
+  gap: var(--space-xs);
+  border: 1px solid rgba(212, 177, 106, 0.2);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(212, 177, 106, 0.07), transparent 64%),
+    rgba(17, 21, 16, 0.72);
+  padding: var(--pad-card);
+}
+
+.business-strategy-head,
+.business-strategy-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.business-strategy-head span,
+.business-strategy-title span,
+.business-impact-strip b {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.business-strategy-head strong,
+.business-strategy-title strong,
+.business-impact-strip strong {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.business-strategy-grid {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.business-strategy-lever {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: 4px solid rgba(104, 167, 255, 0.56);
+  border-radius: var(--radius);
+  background: rgba(5, 8, 13, 0.34);
+  display: grid;
+  gap: var(--space-xs);
+  padding: 9px;
+}
+
+.business-strategy-lever.active {
+  border-left-color: var(--green);
+}
+
+.business-strategy-lever.neutral {
+  border-left-color: var(--amber);
+}
+
+.business-strategy-lever p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.business-impact-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.business-impact-strip span {
+  min-width: 0;
+  border: 1px solid rgba(114, 248, 224, 0.12);
+  border-radius: var(--radius);
+  background: rgba(17, 21, 16, 0.62);
+  display: grid;
+  gap: 3px;
+  padding: 6px 7px;
+}
+
+.business-impact-strip b,
+.business-impact-strip strong {
+  display: block;
+  min-width: 0;
+}
+
+.business-strategy-lever button {
+  justify-self: start;
+  min-width: 128px;
+}
+
 .business-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3894,6 +3989,7 @@ input[data-money-input] {
 }
 
 .business-actions button,
+.business-strategy-lever button,
 .realestate-row button,
 .property-actions button,
 .goods-action {
@@ -3910,6 +4006,11 @@ input[data-money-input] {
   padding: 0 var(--space-sm);
   text-align: center;
   white-space: normal;
+}
+
+.business-strategy-lever button {
+  min-width: 128px;
+  width: fit-content;
 }
 
 .goods-action {
@@ -4489,6 +4590,10 @@ input[data-money-input] {
 
   .business-metrics {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .business-strategy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .business-card .business-head {

@@ -9,11 +9,24 @@
   const MAX_BUSINESSES = 36;
   const PRODUCTIVITY_TARGET = 1;
   const RND_PRODUCTIVITY_GAIN = 0.18;
+  const RND_BUDGET_RATIOS = {
+    food: 0.012,
+    retail: 0.014,
+    services: 0.028,
+    logistics: 0.018,
+    construction: 0.014,
+    software: 0.065,
+    hospitality: 0.016,
+    banking: 0.026,
+    real_estate: 0.018,
+    energy: 0.015,
+    media: 0.038
+  };
   const MONTHLY_INJECTION_ACTIONS = {
     contribute: { label: "Aporte de capital", min: 1000 },
     inventory: { label: "Insumos", min: 500 },
     marketing: { label: "Marketing", min: 100 },
-    rnd: { label: "I+D", min: 250 },
+    rnd: { label: "Inversion I+D", min: 250 },
     supplier_credit: { label: "Credito proveedor", min: 500 }
   };
 
@@ -119,6 +132,56 @@
     const gapAmount = getRndProductivityGapAmount(business, PRODUCTIVITY_TARGET);
     if (gapAmount <= 0) return 0;
     return roundMoney(Math.max(MONTHLY_INJECTION_ACTIONS.rnd.min, gapAmount));
+  }
+
+  function getEstimatedMonthlyRevenue(source, sector, valuation) {
+    const defaults = getSectorDefaults(sector);
+    const rawRevenue = Number(source && source.monthlyPnl && source.monthlyPnl.revenue);
+    if (Number.isFinite(rawRevenue) && rawRevenue > 0) return rawRevenue;
+
+    const monthlyProfit = Number(source && source.monthlyProfit);
+    if (Number.isFinite(monthlyProfit) && monthlyProfit > 0) {
+      return monthlyProfit / Math.max(0.08, defaults.grossMargin * 0.55);
+    }
+
+    const units = Array.isArray(source && source.units) && source.units.length
+      ? source.units.length
+      : 1;
+    const valuationBase = Math.max(0, Number(valuation) || Number(source && source.valuation) || 0) * 0.006;
+    return Math.max(defaults.baseTicket * defaults.demand * units * 0.55, valuationBase, 1000);
+  }
+
+  function getRndMonthlyBudgetCap(sector, monthlyRevenue, valuation) {
+    const revenue = Math.max(0, Number(monthlyRevenue) || 0);
+    const value = Math.max(0, Number(valuation) || 0);
+    const sectorMultiplier = sector === "software" ? 0.22 : ["media", "services"].includes(sector) ? 0.16 : 0.12;
+
+    return roundMoney(Math.max(
+      MONTHLY_INJECTION_ACTIONS.rnd.min,
+      revenue * sectorMultiplier,
+      value * 0.0018
+    ));
+  }
+
+  function getDefaultRndMonthlyBudget(source, sector, valuation) {
+    const monthlyRevenue = getEstimatedMonthlyRevenue(source, sector, valuation);
+    const ratio = RND_BUDGET_RATIOS[sector] || 0.022;
+    const cap = getRndMonthlyBudgetCap(sector, monthlyRevenue, valuation);
+    const baseline = Math.max(MONTHLY_INJECTION_ACTIONS.rnd.min, monthlyRevenue * ratio);
+
+    return roundMoney(Math.min(cap, baseline));
+  }
+
+  function normalizeRndMonthlyBudget(rawBusiness, sector, valuation) {
+    const monthlyRevenue = getEstimatedMonthlyRevenue(rawBusiness, sector, valuation);
+    const cap = getRndMonthlyBudgetCap(sector, monthlyRevenue, valuation);
+    const explicit = Number(rawBusiness && rawBusiness.rndMonthlyBudget);
+
+    if (Number.isFinite(explicit)) {
+      return roundMoney(clamp(explicit, 0, cap));
+    }
+
+    return getDefaultRndMonthlyBudget(rawBusiness, sector, valuation);
   }
 
   function applyRndInvestment(business, amount) {
@@ -590,7 +653,7 @@
     const payroll = roundMoney(employees * Math.max(500, Number(business && business.salaryPerEmployee) || 2200));
     const rent = roundMoney((Array.isArray(business && business.units) ? business.units : []).reduce((sum, unit) => sum + (Number(unit && unit.rent) || 0), 0));
     const marketing = roundMoney(Math.max(0, Number(business && business.marketing) || 0));
-    const rnd = roundMoney(Math.max(0, Number(business && business.rnd) || 0));
+    const rnd = roundMoney(Math.max(0, Number(business && business.rndMonthlyBudget) || getDefaultRndMonthlyBudget(business, business && business.sector, business && business.valuation)));
     const interest = roundMoney(Math.max(0, Number(business && business.debt) || 0) * 0.01);
     const maintenance = roundMoney(Math.max(0, Number(business && business.valuation) || 0) * 0.0018 + Math.max(1, (business && business.units && business.units.length) || 1) * 160);
     const opex = roundMoney(payroll + rent + marketing + rnd + maintenance + interest);
@@ -702,6 +765,18 @@
     business.valuation = roundMoney(Math.max(floor, (Number(business.valuation) || 0) - cashOut));
   }
 
+  function getStartupStarterEmployees(requiredEmployees, salaryPerEmployee, capital) {
+    const hiresNeeded = Math.max(1, Math.floor(Number(requiredEmployees) || 1));
+    const salary = roundMoney(Math.max(500, Number(salaryPerEmployee) || 1800));
+    const hireCost = roundMoney(salary * 0.35);
+    const reserveTarget = Math.max(1500, Number(capital) * 0.22);
+    const affordableHires = Math.max(0, Math.floor((Math.max(0, Number(capital) - reserveTarget)) / Math.max(1, hireCost)));
+
+    if (affordableHires <= 0) return 0;
+    if (capital >= 20000) return Math.min(hiresNeeded, Math.max(2, affordableHires));
+    return Math.min(hiresNeeded, Math.max(1, affordableHires));
+  }
+
   function normalizeBusiness(rawBusiness) {
     if (!isObject(rawBusiness)) return null;
     const sector = typeof rawBusiness.sector === "string" ? rawBusiness.sector : "services";
@@ -727,6 +802,8 @@
       ? rawBusiness.suppliers.map((supplier, index) => normalizeSupplier(supplier, sector, index))
       : createDefaultSuppliers(sector);
     const totalPayables = suppliers.reduce((sum, supplier) => sum + supplier.payableBalance, 0);
+    const rndCapital = roundMoney(Math.max(0, Number(rawBusiness.rnd) || valuation * 0.002));
+    const rndMonthlyBudget = normalizeRndMonthlyBudget(rawBusiness, sector, valuation);
 
     return {
       id: typeof rawBusiness.id === "string" ? rawBusiness.id : createId("biz"),
@@ -745,7 +822,8 @@
       productivity: clamp(Number(rawBusiness.productivity) || 0.78, 0.1, 1.4),
       reputation: clamp(Number(rawBusiness.reputation) || 0.58, 0.05, 1.2),
       marketing: roundMoney(Math.max(0, Number(rawBusiness.marketing) || valuation * 0.006)),
-      rnd: roundMoney(Math.max(0, Number(rawBusiness.rnd) || valuation * 0.002)),
+      rnd: rndCapital,
+      rndMonthlyBudget,
       priceIndex: clamp(Number(rawBusiness.priceIndex) || 1, 0.65, 1.55),
       inventory,
       supplies,
@@ -834,7 +912,8 @@
         supplyShortageUnits: 0,
         supplyCoverageMonths: 0,
         estimated: false
-      }
+      },
+      launchSupportUntilDay: Math.max(0, Math.floor(Number(rawBusiness.launchSupportUntilDay) || 0))
     };
   }
 
@@ -850,6 +929,8 @@
     const units = [normalizeUnit({ name: defaults.unitType, rent: Math.max(900, monthlyProfit * 0.18) }, asset.sector)];
     const requiredEmployees = getRequiredEmployees({ sector: asset.sector, units });
     const employees = Math.max(requiredEmployees, Math.round(monthlyProfit / 2200));
+    const rndCapital = roundMoney(asset.sector === "software" ? monthlyProfit * 0.16 : monthlyProfit * 0.06);
+    const rndMonthlyBudget = roundMoney(Math.max(MONTHLY_INJECTION_ACTIONS.rnd.min, monthlyProfit * (asset.sector === "software" ? 0.065 : 0.025)));
 
     return {
       id: `biz_${asset.id}`,
@@ -868,7 +949,8 @@
       productivity: 0.78,
       reputation: asset.acquisitionType === "franchise" ? 0.68 : 0.58,
       marketing: roundMoney(Math.max(600, monthlyProfit * 0.26)),
-      rnd: roundMoney(asset.sector === "software" ? monthlyProfit * 0.16 : monthlyProfit * 0.06),
+      rnd: rndCapital,
+      rndMonthlyBudget,
       priceIndex: 1,
       inventory: roundMoney(Math.max(1000, monthlyProfit * 1.7)),
       suppliersReliability: 0.82,
@@ -883,7 +965,8 @@
         salaryPerEmployee: 2200,
         valuation,
         marketing: Math.max(600, monthlyProfit * 0.26),
-        rnd: asset.sector === "software" ? monthlyProfit * 0.16 : monthlyProfit * 0.06,
+        rnd: rndCapital,
+        rndMonthlyBudget,
         priceIndex: 1,
         debt: 0,
         units,
@@ -914,6 +997,7 @@
     const sector = settings.sector && SECTOR_DEFAULTS[settings.sector] ? settings.sector : "services";
     const capital = roundMoney(Math.max(0, Number(settings.capital) || 0));
     const defaults = getSectorDefaults(sector);
+    const salaryPerEmployee = 1800;
 
     if (!name) {
       return { ok: false, message: "El nombre de la empresa es obligatorio." };
@@ -931,6 +1015,12 @@
     state.businesses = normalizeBusinesses(state.businesses);
 
     const startupUnits = [normalizeUnit({ name: defaults.unitType, rent: Math.max(650, capital * 0.012) }, sector)];
+    const requiredEmployees = getRequiredEmployees({ sector, units: startupUnits });
+    const starterEmployees = getStartupStarterEmployees(requiredEmployees, salaryPerEmployee, capital);
+    const starterHireCost = roundMoney(starterEmployees * salaryPerEmployee * 0.35);
+    const currentDay = state.time && state.time.day ? state.time.day : 1;
+    const startupRndCapital = roundMoney(sector === "software" ? Math.max(400, capital * 0.03) : Math.max(150, capital * 0.01));
+    const startupRndMonthlyBudget = getDefaultRndMonthlyBudget({ sector, units: startupUnits, valuation: capital }, sector, capital);
     const business = normalizeBusiness({
       id: createId("biz"),
       sourceAssetId: null,
@@ -938,29 +1028,33 @@
       type: "startup",
       sector,
       sectorLabel: defaults.label,
-      cash: capital,
+      cash: Math.max(0, capital - starterHireCost),
       valuation: capital,
       seedValuation: capital,
-      employees: 0,
-      requiredEmployees: getRequiredEmployees({ sector, units: startupUnits }),
-      salaryPerEmployee: 1800,
+      employees: starterEmployees,
+      requiredEmployees,
+      salaryPerEmployee,
       morale: 0.78,
       productivity: 0.72,
       reputation: 0.42,
       marketing: Math.max(500, capital * 0.035),
-      rnd: sector === "software" ? Math.max(400, capital * 0.03) : Math.max(150, capital * 0.01),
+      rnd: startupRndCapital,
+      rndMonthlyBudget: startupRndMonthlyBudget,
       priceIndex: 1,
       inventory: roundMoney(capital * 0.22),
       suppliersReliability: 0.74,
       suppliers: createDefaultSuppliers(sector),
-      units: startupUnits
+      units: startupUnits,
+      launchSupportUntilDay: currentDay + 60
     });
 
     state.businesses.push(business);
 
     return {
       ok: true,
-      message: `${business.name} fundada con caja separada.`,
+      message: starterEmployees > 0
+        ? `${business.name} fundada con equipo inicial y 60 dias de arranque asistido.`
+        : `${business.name} fundada con caja separada.`,
       business
     };
   }
@@ -1017,6 +1111,10 @@
     const supplyFactor = clamp(0.62 + supplierScores.reliability * 0.36 + supplierQuality * 0.06, 0.65, 1.08);
     const randomFactor = 0.94 + Math.random() * 0.14;
     const matureOperatorBoost = business.type === "startup" && business.employees <= 0 ? 0.82 : 1.18;
+    const currentDay = state.time && state.time.day ? state.time.day : 1;
+    const launchSupportActive = business.type === "startup" && currentDay <= (Number(business.launchSupportUntilDay) || 0);
+    const launchDemandBoost = launchSupportActive ? 1 + Math.max(0.05, staffCapacity * 0.08) : 1;
+    const launchCostRelief = launchSupportActive ? clamp(0.92 - staffCapacity * 0.04, 0.84, 0.92) : 1;
     const eventRevenueFactor = clamp(
       1 +
       (Number(impact.business && impact.business.revenueDelta) || 0) +
@@ -1032,7 +1130,7 @@
     const takeover = strategy && typeof strategy.getTakeoverBusinessModifiers === "function"
       ? strategy.getTakeoverBusinessModifiers(state, business)
       : { demand: 1, cost: 1, valuation: 1, label: "Sin influencia", stage: "none" };
-    const demand = defaults.demand * unitsFactor * macroFactor * marketingFactor * staffCapacity * reputationFactor * pricePenalty * supplyFactor * locationFactors.demand * difficultySettings.demand * randomFactor * matureOperatorBoost * eventRevenueFactor * (Number(synergy.demand) || 1) * (Number(takeover.demand) || 1);
+    const demand = defaults.demand * unitsFactor * macroFactor * marketingFactor * staffCapacity * reputationFactor * pricePenalty * supplyFactor * locationFactors.demand * difficultySettings.demand * randomFactor * matureOperatorBoost * launchDemandBoost * eventRevenueFactor * (Number(synergy.demand) || 1) * (Number(takeover.demand) || 1);
     const unitsSold = staffCapacity <= 0 ? 0 : Math.max(0, Math.round(demand));
     const revenue = roundMoney(unitsSold * defaults.baseTicket * business.priceIndex * locationFactors.rent);
     const royaltyIncome = roundMoney(business.franchiseUnits * defaults.baseTicket * defaults.demand * business.royaltyRate * 0.42);
@@ -1064,12 +1162,12 @@
       ? roundMoney(((stockAfterUse * supplyState.unitCost) + (restockQuote.purchasedUnits * restockQuote.unitCost)) / nextSupplyUnits)
       : supplyState.unitCost;
     const payroll = roundMoney(business.employees * business.salaryPerEmployee * difficultySettings.cost);
-    const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost);
-    const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost);
+    const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost * launchCostRelief);
+    const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost * launchCostRelief);
     const interest = roundMoney(business.debt * 0.01);
     const supplierPayments = processSupplierPayables(business);
-    const activeMarketing = roundMoney(business.marketing * operatingReadiness);
-    const activeRnd = roundMoney(business.rnd * operatingReadiness);
+    const activeMarketing = roundMoney(business.marketing * operatingReadiness * (launchSupportActive ? 0.94 : 1));
+    const activeRnd = roundMoney((Number(business.rndMonthlyBudget) || 0) * operatingReadiness * (launchSupportActive ? 0.94 : 1));
     const opex = roundMoney(payroll + rent + activeMarketing + activeRnd + maintenance + interest);
     const ebitda = roundMoney(adjustedRevenue - adjustedCogs - opex + interest);
     const taxResult = taxes && taxes.applyBusinessTax ? taxes.applyBusinessTax(state, ebitda) : { tax: Math.max(0, ebitda * 0.21) };
@@ -1340,11 +1438,11 @@
 
     if (action === "rnd") {
       if (business.cash < amount) {
-        return { ok: false, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} no ejecutado por caja empresarial insuficiente.` };
+        return { ok: false, amount, message: `${business.name}: inversion mensual en I+D de ${formatMoneyBrief(amount)} no ejecutada por caja empresarial insuficiente.` };
       }
       business.cash = roundMoney(business.cash - amount);
       applyRndInvestment(business, amount);
-      return { ok: true, amount, message: `${business.name}: I+D mensual de ${formatMoneyBrief(amount)} aplicado.` };
+      return { ok: true, amount, message: `${business.name}: inversion mensual en I+D de ${formatMoneyBrief(amount)} aplicada.` };
     }
 
     if (action === "inventory") {
@@ -1545,7 +1643,7 @@
     }
 
     if (action === "rnd") {
-      const amount = roundMoney(Math.max(250, Number(value) || getRndProductivityTargetAmount(business) || business.rnd * 0.25 || business.valuation * 0.004));
+      const amount = roundMoney(Math.max(250, Number(value) || getRndProductivityTargetAmount(business) || business.rndMonthlyBudget || business.valuation * 0.001));
       if (business.cash < amount) return { ok: false, message: "Caja empresarial insuficiente para I+D." };
       business.cash = roundMoney(business.cash - amount);
       applyRndInvestment(business, amount);

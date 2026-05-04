@@ -396,8 +396,8 @@
     return {
       facil: 0.018,
       normal: 0.026,
-      dificil: 0.036,
-      pesadilla: 0.048
+      dificil: 0.033,
+      pesadilla: 0.043
     }[difficulty] || 0.026;
   }
 
