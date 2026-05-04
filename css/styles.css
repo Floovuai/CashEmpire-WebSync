@@ -1107,7 +1107,9 @@ input[data-money-input] {
 
 .message-list {
   display: grid;
+  align-content: start;
   gap: var(--space-xs);
+  grid-auto-rows: max-content;
   max-height: 330px;
   min-height: 0;
   overflow: auto;
@@ -1116,6 +1118,7 @@ input[data-money-input] {
 
 .message-item {
   display: grid;
+  min-height: 76px;
   border: 1px solid rgba(114, 248, 224, 0.16);
   border-left: 4px solid rgba(104, 167, 255, 0.62);
   border-radius: var(--radius);
@@ -1141,6 +1144,7 @@ input[data-money-input] {
 }
 
 .message-item.expanded {
+  min-height: 0;
   opacity: 1;
   border-color: rgba(114, 248, 224, 0.32);
   box-shadow: inset 0 0 0 1px rgba(247, 247, 239, 0.03);
@@ -1149,13 +1153,17 @@ input[data-money-input] {
 .message-toggle {
   position: relative;
   display: grid;
+  align-content: center;
+  box-sizing: border-box;
   width: 100%;
-  min-height: 84px;
-  gap: 3px;
+  min-height: 76px;
+  min-block-size: 76px;
+  height: 100%;
+  gap: 4px;
   border: 0;
   background: transparent;
   color: var(--text);
-  padding: 9px 38px 9px 10px;
+  padding: 10px 38px 10px 10px;
   text-align: left;
 }
 
@@ -1168,17 +1176,32 @@ input[data-money-input] {
 .message-toggle small,
 .message-detail-copy span,
 .message-detail-section span {
+  display: block;
+  min-width: 0;
   color: var(--muted);
   font-size: 0.74rem;
+  line-height: 1.18;
 }
 
 .message-toggle strong,
 .message-detail-copy h4,
 .message-detail-section p {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
+.message-toggle strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.16;
+}
+
 .message-toggle small {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   line-height: 1.32;
 }
 
@@ -1196,6 +1219,10 @@ input[data-money-input] {
 
 .message-toggle[aria-expanded="true"] i {
   transform: translateY(-30%) rotate(225deg);
+}
+
+.message-item.expanded .message-toggle {
+  height: auto;
 }
 
 .message-detail {
@@ -5833,6 +5860,7 @@ input[data-money-input] {
 
   .message-toggle {
     min-height: 88px;
+    min-block-size: 88px;
     padding-right: 34px;
   }
 
