@@ -765,6 +765,41 @@
     });
   }
 
+  function fitSingleLineText(element, cssVariable, maxRem, minRem) {
+    if (!element) return;
+
+    let size = Number(maxRem) || 1;
+    const minSize = Number(minRem) || 0.68;
+    const step = 0.02;
+
+    element.style.setProperty(cssVariable, `${size}rem`);
+
+    if (element.clientWidth <= 0) return;
+
+    while (element.scrollWidth > element.clientWidth + 1 && size > minSize) {
+      size = Math.max(minSize, Math.round((size - step) * 100) / 100);
+      element.style.setProperty(cssVariable, `${size}rem`);
+    }
+  }
+
+  function fitPlayerNames() {
+    fitSingleLineText(els.hudPlayerName, "--player-name-size", 1.06, 0.62);
+    fitSingleLineText(els.menuPlayerName, "--menu-player-name-size", 0.92, 0.72);
+  }
+
+  function renderPlayerNames() {
+    if (!state || !state.player) return;
+    const playerName = state.player.name || "Jugador";
+
+    [els.hudPlayerName, els.menuPlayerName].forEach((element) => {
+      if (!element) return;
+      element.textContent = playerName;
+      element.title = playerName;
+    });
+
+    window.requestAnimationFrame(fitPlayerNames);
+  }
+
   function getAssetSymbol(asset) {
     const ticker = asset && asset.ticker ? String(asset.ticker) : "";
     return ticker.replace(/[^A-Z0-9]/gi, "").slice(0, 4).toUpperCase() || "CE";
@@ -4479,9 +4514,9 @@
     ensureExtendedState();
     syncNewsMessages();
 
-    els.hudPlayerName.textContent = state.player.name;
-    renderPlayerAvatar();
     els.hudDay.textContent = `Dia ${state.time.day}`;
+    renderPlayerNames();
+    renderPlayerAvatar();
     els.hudCash.textContent = formatHudMoney(state.player.cash);
     els.hudCash.setAttribute("title", formatMoney(state.player.cash));
     els.hudNetWorth.textContent = formatHudMoney(state.player.netWorth);
@@ -4497,7 +4532,6 @@
     els.hudCashflow.classList.toggle("is-positive", cashflow30 >= 0);
     els.hudCashflow.classList.toggle("is-negative", cashflow30 < 0);
     if (els.nextDecision) els.nextDecision.textContent = getNextDecisionText();
-    els.menuPlayerName.textContent = state.player.name;
     els.saveStatus.textContent = `Slot ${currentSlot} / ${formatDateTime(state.updatedAt)}`;
     els.summaryDifficulty.textContent = titleCase(state.player.difficulty);
     els.summaryStartingCash.textContent = formatMoney(state.player.initialBudget);
@@ -5193,7 +5227,10 @@
     const isOpen = !els.userMenu.hidden;
     els.userMenu.hidden = isOpen;
     els.userMenuButton.setAttribute("aria-expanded", String(!isOpen));
-    if (!isOpen) closeMessageCenter();
+    if (!isOpen) {
+      closeMessageCenter();
+      window.requestAnimationFrame(fitPlayerNames);
+    }
   }
 
   function closeUserMenu() {
