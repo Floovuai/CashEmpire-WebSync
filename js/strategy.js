@@ -149,13 +149,13 @@
 
   const CONTRACT_REWARD_MULTIPLIERS = {
     first_buy: 1.2,
-    watchlist: 0.5,
-    diversify: 1.14,
-    cash_guard: 0.28,
-    risk_guard: 0.38,
-    read_news: 0.16,
-    business_health: 1.18,
-    hedge: 1.02
+    watchlist: 0.62,
+    diversify: 1.2,
+    cash_guard: 0.34,
+    risk_guard: 0.52,
+    read_news: 0.24,
+    business_health: 1.24,
+    hedge: 1.08
   };
 
   const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
@@ -741,12 +741,12 @@
     const difficultyRewardMultiplier = {
       facil: 0.92,
       normal: 1,
-      dificil: 1.08,
-      pesadilla: 1.16
+      dificil: 1.14,
+      pesadilla: 1.26
     }[difficulty] || 1;
     const recent = getRecentDecisionSummary(state, 7);
-    const scaledReward = 90 + Math.sqrt(netWorth) * 0.08 + week * 2.5 + index * 55;
-    const rewardCap = Math.max(320, netWorth * 0.0008);
+    const scaledReward = 115 + Math.sqrt(netWorth) * 0.09 + week * 3 + index * 60;
+    const rewardCap = Math.max(420, netWorth * 0.0012);
     const baseReward = Math.round(Math.min(rewardCap, scaledReward) * difficultyRewardMultiplier);
     const basePower = index === 0 ? 2 : 1;
     const map = {
@@ -857,8 +857,19 @@
     const selected = [];
 
     pushUniqueContractKind(selected, metrics.positions.length ? "diversify" : "first_buy", state, metrics);
-    pushUniqueContractKind(selected, metrics.watchlistCount < 3 ? "watchlist" : metrics.unread > 0 ? "read_news" : "risk_guard", state, metrics);
     pushUniqueContractKind(selected, metrics.hasBusiness ? "business_health" : metrics.hasHedge ? "risk_guard" : "hedge", state, metrics);
+    pushUniqueContractKind(
+      selected,
+      metrics.riskScore > 52
+        ? "risk_guard"
+        : metrics.watchlistCount < 3
+          ? "watchlist"
+          : metrics.unread > 0
+            ? "read_news"
+            : "cash_guard",
+      state,
+      metrics
+    );
 
     const extraKind = CONTRACT_ROTATION[week % CONTRACT_ROTATION.length];
     pushUniqueContractKind(selected, extraKind, state, metrics);

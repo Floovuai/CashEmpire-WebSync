@@ -96,30 +96,30 @@
       scenarioImpact: 1
     },
     dificil: {
-      volatility: 1.58,
-      tax: 1.3,
-      negativeEvents: 1.45,
-      loanRate: 1.32,
-      dividend: 0.91,
-      marketDrift: 0.965,
-      businessDemand: 0.975,
-      businessCost: 1.05,
-      collectionRate: 0.965,
-      valuationDrift: 0.965,
-      scenarioImpact: 1.05
+      volatility: 1.44,
+      tax: 1.18,
+      negativeEvents: 1.22,
+      loanRate: 1.28,
+      dividend: 0.96,
+      marketDrift: 0.995,
+      businessDemand: 1,
+      businessCost: 1.03,
+      collectionRate: 0.99,
+      valuationDrift: 0.99,
+      scenarioImpact: 1.02
     },
     pesadilla: {
-      volatility: 2.04,
-      tax: 1.55,
-      negativeEvents: 1.82,
-      loanRate: 1.46,
-      dividend: 0.83,
-      marketDrift: 0.91,
-      businessDemand: 0.955,
-      businessCost: 1.075,
-      collectionRate: 0.94,
-      valuationDrift: 0.91,
-      scenarioImpact: 1.12
+      volatility: 1.86,
+      tax: 1.38,
+      negativeEvents: 1.52,
+      loanRate: 1.4,
+      dividend: 0.9,
+      marketDrift: 0.95,
+      businessDemand: 0.978,
+      businessCost: 1.055,
+      collectionRate: 0.962,
+      valuationDrift: 0.945,
+      scenarioImpact: 1.06
     }
   };
 
