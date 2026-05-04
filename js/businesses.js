@@ -1122,6 +1122,7 @@
     const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost);
     const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost);
     const interest = roundMoney(business.debt * 0.01);
+    const openingCash = roundMoney(business.cash);
     const supplierPayments = processSupplierPayables(business);
     const activeMarketing = roundMoney(business.marketing * operatingReadiness * 0.42);
     const activeRnd = roundMoney(business.rnd * operatingReadiness * 0.3);
@@ -1134,8 +1135,6 @@
     const cashFlow = roundMoney(netIncome - restock - newReceivables + collectedReceivables);
     const projectedCash = roundMoney(business.cash + cashFlow);
     const shortfall = projectedCash < 0 ? roundMoney(Math.abs(projectedCash)) : 0;
-    const reportedCashFlow = roundMoney(cashFlow - supplierPayments - shortfall);
-
     business.supplies = {
       ...supplyState,
       stockUnits: nextSupplyUnits,
@@ -1155,6 +1154,7 @@
       business.morale = clamp(business.morale - 0.035, 0.1, 1.1);
       business.suppliersReliability = clamp(business.suppliersReliability - 0.04, 0.25, 1);
     }
+    const reportedCashFlow = roundMoney(business.cash - openingCash - shortfall);
     business.suppliersReliability = clamp(business.suppliersReliability + (eventSupplierFactor - 1) * 0.18, 0.25, 1);
     business.reputation = clamp(business.reputation + (netIncome >= 0 ? 0.012 : -0.018) + (stockoutPenalty < 1 ? -0.035 : 0) + (Number(impact.business && impact.business.reputationDelta) || 0), 0.05, 1.2);
     business.morale = clamp(business.morale + (netIncome >= 0 ? 0.008 : -0.014) + (Number(impact.business && impact.business.moraleDelta) || 0), 0.1, 1.1);
@@ -1231,6 +1231,18 @@
         gross: adjustedRevenue,
         taxes: taxResult.tax
       });
+      if (shortfall > 0) {
+        player.appendCashflow(state, {
+          type: "business_shortfall_credit",
+          businessId: business.id,
+          assetId: business.sourceAssetId,
+          scope: "business",
+          label: `Financiacion de emergencia ${business.name}`,
+          amount: shortfall,
+          gross: shortfall,
+          channel: "financing"
+        });
+      }
     }
 
     return {

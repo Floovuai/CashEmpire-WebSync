@@ -149,13 +149,13 @@
 
   const CONTRACT_REWARD_MULTIPLIERS = {
     first_buy: 1.2,
-    watchlist: 0.42,
-    diversify: 1.08,
-    cash_guard: 0.36,
-    risk_guard: 0.44,
-    read_news: 0.22,
-    business_health: 1.04,
-    hedge: 0.9
+    watchlist: 0.5,
+    diversify: 1.14,
+    cash_guard: 0.28,
+    risk_guard: 0.38,
+    read_news: 0.16,
+    business_health: 1.18,
+    hedge: 1.02
   };
 
   const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
@@ -841,8 +841,13 @@
     }
   }
 
+  function countPassiveContracts(selected) {
+    return selected.reduce((count, kind) => count + (PASSIVE_CONTRACTS.has(kind) ? 1 : 0), 0);
+  }
+
   function pushUniqueContractKind(selected, kind, state, metrics) {
     if (!kind || selected.includes(kind) || !isContractAllowed(state, kind, metrics)) return;
+    if (PASSIVE_CONTRACTS.has(kind) && countPassiveContracts(selected) >= 1) return;
     selected.push(kind);
   }
 
