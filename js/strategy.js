@@ -138,6 +138,7 @@
 
   const CONTRACT_ROTATION = [
     "first_buy",
+    "active_trade",
     "watchlist",
     "diversify",
     "cash_guard",
@@ -148,14 +149,15 @@
   ];
 
   const CONTRACT_REWARD_MULTIPLIERS = {
-    first_buy: 1.28,
-    watchlist: 0.46,
-    diversify: 1.3,
-    cash_guard: 0.26,
-    risk_guard: 0.44,
-    read_news: 0.16,
-    business_health: 1.46,
-    hedge: 1.2
+    first_buy: 1.2,
+    active_trade: 1.08,
+    watchlist: 0.62,
+    diversify: 1.2,
+    cash_guard: 0.34,
+    risk_guard: 0.52,
+    read_news: 0.24,
+    business_health: 1.24,
+    hedge: 1.08
   };
 
   const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
@@ -489,6 +491,11 @@
     const netWorth = Math.max(1, Number(state.player && state.player.netWorth) || Number(state.player && state.player.cash) || 1);
     const cash = Math.max(0, Number(state.player && state.player.cash) || 0);
     const unread = Array.isArray(state.events) ? state.events.filter((item) => !item.read).length : 0;
+    const currentDay = state && state.time ? toDay(state.time.day) : 1;
+    const weekStartDay = Math.max(1, currentDay - 6);
+    const weeklyTransactions = Array.isArray(state.transactions)
+      ? state.transactions.filter((item) => item && (Number(item.day) || 0) >= weekStartDay).length
+      : 0;
     const riskScore = getRiskProfile(state).score;
     const debtCount = Array.isArray(state.debts)
       ? state.debts.filter((debt) => debt && (Number(debt.balance) || 0) > 0).length
@@ -514,6 +521,7 @@
       debtCount,
       cashRatio,
       investedRatio,
+      weeklyTransactions,
       watchlistCount: strategyState.watchlist.length,
       hasBusiness: businesses.length > 0,
       hasHedge: strategyState.activeHedges.length > 0,
@@ -745,8 +753,8 @@
       pesadilla: 1.26
     }[difficulty] || 1;
     const recent = getRecentDecisionSummary(state, 7);
-    const scaledReward = 115 + Math.sqrt(netWorth) * 0.09 + week * 3 + index * 60;
-    const rewardCap = Math.max(420, netWorth * 0.0012);
+    const scaledReward = 180 + Math.sqrt(netWorth) * 0.12 + week * 6 + index * 75;
+    const rewardCap = Math.max(650, netWorth * 0.0018);
     const baseReward = Math.round(Math.min(rewardCap, scaledReward) * difficultyRewardMultiplier);
     const basePower = index === 0 ? 2 : 1;
     const map = {
@@ -754,6 +762,11 @@
         title: "Ejecuta una compra",
         body: "Compra cualquier activo para mantener el ciclo de decisiones vivo.",
         target: 1
+      },
+      active_trade: {
+        title: "Mueve la cartera",
+        body: "Haz 2 decisiones de mercado esta semana entre compras o ventas.",
+        target: 2
       },
       watchlist: {
         title: "Arma vigilancia",
@@ -797,20 +810,10 @@
 
     if (PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
       const hasEconomicExposure = metrics.positions.length > 0 || metrics.hasBusiness || metrics.debtCount > 0;
-      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.6 : 0;
+      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.7 : 0;
       rewardPower = Math.max(1, rewardPower - 1);
     } else if (SUPPORT_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
       rewardMultiplier *= metrics.positions.length > 0 || metrics.hasBusiness ? 1 : 0.45;
-    }
-
-    if (!PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions >= 2) {
-      rewardMultiplier *= 1.08;
-      rewardPower += 1;
-    }
-
-    if (kind === "business_health" && metrics.businessStress) {
-      rewardMultiplier *= 1.12;
-      rewardPower += 1;
     }
 
     const rewardCash = Math.max(0, Math.round(baseReward * rewardMultiplier));
@@ -834,6 +837,8 @@
         return metrics.positions.length === 0;
       case "watchlist":
         return metrics.watchlistCount < 6;
+      case "active_trade":
+        return metrics.positions.length > 0 && metrics.weeklyTransactions < 2;
       case "diversify":
         return metrics.positions.length > 0 && metrics.categories.size < 4;
       case "cash_guard":
@@ -867,29 +872,19 @@
     const selected = [];
 
     pushUniqueContractKind(selected, metrics.positions.length ? "diversify" : "first_buy", state, metrics);
+    if (metrics.positions.length > 0 && metrics.weeklyTransactions < 2) {
+      pushUniqueContractKind(selected, "active_trade", state, metrics);
+    }
     pushUniqueContractKind(selected, metrics.hasBusiness ? "business_health" : metrics.hasHedge ? "risk_guard" : "hedge", state, metrics);
     pushUniqueContractKind(
       selected,
-      metrics.hasBusiness && metrics.businessStress
-        ? "business_health"
-        : metrics.riskScore > 52
-          ? "risk_guard"
-          : metrics.watchlistCount < 3
-            ? "watchlist"
-            : metrics.unread > 0
-              ? "read_news"
-              : "cash_guard",
-      state,
-      metrics
-    );
-
-    pushUniqueContractKind(
-      selected,
-      metrics.riskScore > 52 && !metrics.hasHedge
-        ? "hedge"
+      metrics.riskScore > 52
+        ? "risk_guard"
         : metrics.watchlistCount < 3
-          ? "diversify"
-          : "cash_guard",
+          ? "watchlist"
+          : metrics.unread > 0
+            ? "read_news"
+            : "cash_guard",
       state,
       metrics
     );
@@ -923,6 +918,8 @@
         return metrics.positions.length > 0 ? 1 : 0;
       case "watchlist":
         return Math.min(contract.target, strategy.watchlist.length);
+      case "active_trade":
+        return Math.min(contract.target, metrics.weeklyTransactions);
       case "diversify":
         return Math.min(contract.target, metrics.categories.size);
       case "cash_guard":

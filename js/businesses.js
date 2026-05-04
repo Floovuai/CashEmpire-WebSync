@@ -803,6 +803,9 @@
           };
         }).filter(Boolean).slice(-18)
         : [],
+      createdDay: Math.max(1, Math.floor(Number(rawBusiness.createdDay) || 1)),
+      startupSupportUntilDay: Math.max(0, Math.floor(Number(rawBusiness.startupSupportUntilDay) || 0)),
+      startupSupportLevel: clamp(Number(rawBusiness.startupSupportLevel) || 0, 0, 0.35),
       units,
       debt,
       ownershipPercent: clamp(Number(rawBusiness.ownershipPercent) || 1, 0.1, 1),
@@ -961,19 +964,21 @@
     state.player.cash = roundMoney(state.player.cash - capital);
     state.businesses = normalizeBusinesses(state.businesses);
 
-    const startupUnits = [normalizeUnit({ name: defaults.unitType, rent: Math.max(650, capital * 0.012) }, sector)];
+    const foundedDay = Math.max(1, Math.floor(Number(state.time && state.time.day) || 1));
+    const startupUnits = [normalizeUnit({ name: defaults.unitType, rent: Math.max(550, capital * 0.0105) }, sector)];
     const requiredEmployees = getRequiredEmployees({ sector, units: startupUnits });
     const salaryPerEmployee = getStartupSalaryPerEmployee(sector);
-    const launchEmployees = Math.max(1, Math.min(requiredEmployees, Math.ceil(requiredEmployees * 0.4)));
-    const setupCost = roundMoney(Math.max(1200, capital * 0.06));
-    const marketingBudget = roundMoney(getStartupMarketingBudget(sector, capital));
-    const rndBudget = roundMoney(getStartupRndBudget(sector, capital));
-    const inventoryBudget = roundMoney(capital * (sector === "software" ? 0.12 : sector === "food" ? 0.2 : 0.18));
-    const payrollReserve = roundMoney(launchEmployees * salaryPerEmployee * 0.45);
+    const launchEmployees = Math.max(1, Math.min(requiredEmployees, Math.ceil(requiredEmployees * 0.55)));
+    const setupCost = roundMoney(Math.max(900, capital * 0.045));
+    const marketingBudget = roundMoney(getStartupMarketingBudget(sector, capital) * 0.82);
+    const rndBudget = roundMoney(getStartupRndBudget(sector, capital) * 0.84);
+    const inventoryBudget = roundMoney(capital * (sector === "software" ? 0.1 : sector === "food" ? 0.17 : 0.145));
+    const payrollReserve = roundMoney(launchEmployees * salaryPerEmployee * 0.32);
     const upfrontCommitment = roundMoney(setupCost + marketingBudget + rndBudget + inventoryBudget + payrollReserve);
-    const startupCash = roundMoney(Math.max(1500, capital - upfrontCommitment));
-    const seedValuation = roundMoney(Math.max(capital * 0.68, capital - setupCost * 0.7 - payrollReserve * 0.35));
-    const valuation = roundMoney(Math.max(seedValuation, capital - setupCost * 0.42));
+    const startupCash = roundMoney(Math.max(capital * 0.2, capital - upfrontCommitment));
+    const seedValuation = roundMoney(Math.max(capital * 0.72, capital - setupCost * 0.62 - payrollReserve * 0.25));
+    const valuation = roundMoney(Math.max(seedValuation, capital - setupCost * 0.34));
+    const startupSupportLevel = clamp(0.1 + Math.min(0.18, capital / 250000), 0.1, 0.28);
     const business = normalizeBusiness({
       id: createId("biz"),
       sourceAssetId: null,
@@ -996,14 +1001,17 @@
       inventory: inventoryBudget,
       suppliersReliability: 0.74,
       suppliers: createDefaultSuppliers(sector),
-      units: startupUnits
+      units: startupUnits,
+      createdDay: foundedDay,
+      startupSupportUntilDay: foundedDay + 120,
+      startupSupportLevel
     });
 
     state.businesses.push(business);
 
     return {
       ok: true,
-      message: `${business.name} fundada con caja separada.`,
+      message: `${business.name} fundada con caja separada y runway inicial reforzado.`,
       business
     };
   }
@@ -1041,24 +1049,6 @@
     return 1;
   }
 
-  function getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths) {
-    const typeBoost = business && business.type === "startup" ? 0.08 : 0;
-    const shortageBoost = clamp(shortageRatio * 0.45, 0, 0.2);
-    const lowCoverageBoost = supplyCoverageMonths < 0.9
-      ? clamp((0.9 - supplyCoverageMonths) * 0.26, 0, 0.12)
-      : 0;
-    return clamp(0.62 + typeBoost + shortageBoost + lowCoverageBoost, 0.58, 0.88);
-  }
-
-  function getIntangibleSpendBudget(business, operatingReadiness, spendType) {
-    const intensity = spendType === "rnd"
-      ? clamp(0.08 + operatingReadiness * 0.05, 0.08, 0.14)
-      : clamp(0.1 + operatingReadiness * 0.06, 0.1, 0.16);
-    const floor = spendType === "rnd" ? 120 : 180;
-    const source = Math.max(0, Number(spendType === "rnd" ? business.rnd : business.marketing) || 0);
-    return roundMoney(Math.min(source, Math.max(0, source * intensity, floor)));
-  }
-
   function processBusinessMonth(state, business, eventImpact) {
     const snapshot = {
       revenue: roundMoney(Number(business.monthlyPnl && business.monthlyPnl.revenue) || 0),
@@ -1072,22 +1062,26 @@
     const supplierQuality = supplierScores.quality;
     const locationFactors = getWeightedLocationFactors(business.units);
     const difficultySettings = getDifficultyBusinessSettings(state);
+    const currentDay = Math.max(1, Math.floor(Number(state.time && state.time.day) || 1));
+    const isStartupSupportActive = business.type === "startup"
+      && (Number(business.startupSupportUntilDay) || 0) >= currentDay;
+    const startupSupportLevel = isStartupSupportActive ? clamp(Number(business.startupSupportLevel) || 0, 0, 0.35) : 0;
     const unitsFactor = business.units.reduce((sum, unit) => {
       const conditionLift = 0.85 + unit.condition * 0.25;
       return sum + unit.level * clamp(conditionLift, 0.9, 1.16);
     }, 0);
     const macroFactor = getMacroDemandFactor(state);
-    const marketingFactor = clamp(0.78 + Math.log10(1 + business.marketing / 750) * 0.18, 0.78, 1.42);
+    const marketingFactor = clamp(0.72 + Math.log10(1 + business.marketing / 900) * 0.16 + startupSupportLevel * 0.12, 0.72, 1.4);
     const requiredEmployees = getRequiredEmployees(business);
     business.requiredEmployees = requiredEmployees;
     const staffCapacity = clamp(business.employees / requiredEmployees, 0, 1.35);
-    const operatingReadiness = clamp(0.35 + staffCapacity * 0.65, 0.35, 1.2);
-    const reputationFactor = clamp(0.72 + business.reputation * 0.52, 0.72, 1.34);
+    const operatingReadiness = clamp(0.35 + staffCapacity * 0.65 + startupSupportLevel * 0.18, 0.35, 1.24);
+    const reputationFactor = clamp(0.72 + business.reputation * 0.52 + startupSupportLevel * 0.06, 0.72, 1.36);
     const pricePenalty = business.priceIndex > 1.12 ? 1 - (business.priceIndex - 1.12) * 0.9 : 1 + (1 - business.priceIndex) * 0.14;
     const supplyFactor = clamp(0.62 + supplierScores.reliability * 0.36 + supplierQuality * 0.06, 0.65, 1.08);
-    const randomFactor = 0.94 + Math.random() * 0.14;
+    const randomFactor = 0.95 + Math.random() * (isStartupSupportActive ? 0.16 : 0.14);
     const matureOperatorBoost = business.type === "startup"
-      ? clamp(0.84 + staffCapacity * 0.16 + business.reputation * 0.04, 0.82, 1.02)
+      ? clamp(0.84 + staffCapacity * 0.16 + business.reputation * 0.04 + startupSupportLevel * 0.24, 0.82, 1.08)
       : 1.03;
     const eventRevenueFactor = clamp(
       1 +
@@ -1127,10 +1121,7 @@
     const stockAfterUse = roundUnits(Math.max(0, supplyAfterSales - wastedUnits));
     const targetStockUnits = roundUnits(Math.max(supplyNeededUnits, supplyNeededUnits * supplyState.minCoverageMonths));
     const restockGapUnits = roundUnits(Math.max(0, targetStockUnits - stockAfterUse));
-    const shortageRatio = supplyNeededUnits > 0 ? shortageUnits / Math.max(1, supplyNeededUnits) : 0;
-    const supplyCoverageMonths = supplyNeededUnits > 0 ? stockAfterUse / Math.max(1, supplyNeededUnits) : 99;
-    const restockCoverage = getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths);
-    const restockTargetCost = roundMoney(restockGapUnits * supplyState.unitCost * restockCoverage);
+    const restockTargetCost = roundMoney(restockGapUnits * supplyState.unitCost * (isStartupSupportActive ? 0.38 : 0.45));
     const restockQuote = restockTargetCost > 0
       ? getProcurementQuote(business, restockTargetCost)
       : { amount: 0, unitCost: supplyState.unitCost, deliveryRate: 1, purchasedUnits: 0 };
@@ -1139,14 +1130,15 @@
     const nextSupplyUnitCost = nextSupplyUnits > 0
       ? roundMoney(((stockAfterUse * supplyState.unitCost) + (restockQuote.purchasedUnits * restockQuote.unitCost)) / nextSupplyUnits)
       : supplyState.unitCost;
-    const payroll = roundMoney(business.employees * business.salaryPerEmployee * difficultySettings.cost);
-    const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost);
-    const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost);
+    const startupCostRelief = isStartupSupportActive ? Math.max(0.86, 1 - startupSupportLevel * 0.45) : 1;
+    const payroll = roundMoney(business.employees * business.salaryPerEmployee * difficultySettings.cost * startupCostRelief);
+    const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost * startupCostRelief);
+    const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost * startupCostRelief);
     const interest = roundMoney(business.debt * 0.01);
     const openingCash = roundMoney(business.cash);
     const supplierPayments = processSupplierPayables(business);
-    const activeMarketing = getIntangibleSpendBudget(business, operatingReadiness, "marketing");
-    const activeRnd = getIntangibleSpendBudget(business, operatingReadiness, "rnd");
+    const activeMarketing = roundMoney(business.marketing * operatingReadiness * 0.42);
+    const activeRnd = roundMoney(business.rnd * operatingReadiness * 0.3);
     const opex = roundMoney(payroll + rent + activeMarketing + activeRnd + maintenance + interest);
     const ebitda = roundMoney(adjustedRevenue - adjustedCogs - opex + interest);
     const taxResult = taxes && taxes.applyBusinessTax ? taxes.applyBusinessTax(state, ebitda) : { tax: Math.max(0, ebitda * 0.21) };
@@ -1168,34 +1160,18 @@
       lastDeliveryRate: restockQuote.deliveryRate
     };
     syncBusinessInventory(business);
-    business.marketing = roundMoney(Math.max(0, business.marketing - activeMarketing * 0.82));
-    business.rnd = roundMoney(Math.max(0, business.rnd - activeRnd * 0.7));
     business.cash = roundMoney(Math.max(0, projectedCash));
     business.receivables = roundMoney(Math.max(0, business.receivables + newReceivables));
     if (shortfall > 0) {
       business.debt = roundMoney(business.debt + shortfall);
-      business.morale = clamp(business.morale - 0.024, 0.1, 1.1);
-      business.suppliersReliability = clamp(business.suppliersReliability - 0.028, 0.25, 1);
+      business.morale = clamp(business.morale - (isStartupSupportActive ? 0.02 : 0.035), 0.1, 1.1);
+      business.suppliersReliability = clamp(business.suppliersReliability - (isStartupSupportActive ? 0.022 : 0.04), 0.25, 1);
     }
     const reportedCashFlow = roundMoney(business.cash - openingCash - shortfall);
     business.suppliersReliability = clamp(business.suppliersReliability + (eventSupplierFactor - 1) * 0.18, 0.25, 1);
-    business.reputation = clamp(
-      business.reputation +
-      (netIncome >= 0 ? 0.014 : -0.011) +
-      (stockoutPenalty < 1 ? -0.018 - shortageRatio * 0.02 : 0.004) +
-      (Number(impact.business && impact.business.reputationDelta) || 0),
-      0.05,
-      1.2
-    );
-    business.morale = clamp(
-      business.morale +
-      (netIncome >= 0 ? 0.01 : -0.009) +
-      (stockoutPenalty < 0.85 ? -0.01 : 0.003) +
-      (Number(impact.business && impact.business.moraleDelta) || 0),
-      0.1,
-      1.1
-    );
-    business.productivity = clamp(business.productivity + activeRnd / Math.max(1, business.valuation) * 0.08 - 0.0025, 0.1, 1.4);
+    business.reputation = clamp(business.reputation + (netIncome >= 0 ? 0.012 : -0.018) + (stockoutPenalty < 1 ? -0.035 : 0) + (Number(impact.business && impact.business.reputationDelta) || 0) + startupSupportLevel * 0.012, 0.05, 1.2);
+    business.morale = clamp(business.morale + (netIncome >= 0 ? 0.008 : -0.014) + (Number(impact.business && impact.business.moraleDelta) || 0) + startupSupportLevel * 0.015, 0.1, 1.1);
+    business.productivity = clamp(business.productivity + business.rnd / Math.max(1, business.valuation) * 0.06 - 0.004 + startupSupportLevel * 0.012, 0.1, 1.4);
     const synergyValuationLift = 1 + ((Number(synergy.valuation) || 1) - 1) * 0.35;
     const takeoverValuationLift = 1 + ((Number(takeover.valuation) || 1) - 1) * 0.55;
     business.valuation = roundMoney(Math.max(

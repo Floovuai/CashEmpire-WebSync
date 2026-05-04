@@ -410,6 +410,26 @@
     }[difficulty] || 0.001;
   }
 
+  function getPlayerStressScore(state) {
+    const playerState = isObject(state) && isObject(state.player) ? state.player : {};
+    const cash = Math.max(0, Number(playerState.cash) || 0);
+    const netWorth = Math.max(1, Number(playerState.netWorth) || cash || 1);
+    const businesses = Array.isArray(state && state.businesses) ? state.businesses : [];
+    const cashRatio = cash / netWorth;
+    const businessStress = businesses.some((business) => {
+      const pnl = Number(business && business.monthlyPnl && business.monthlyPnl.cashFlow) || 0;
+      const coverage = Number(business && business.monthlyPnl && business.monthlyPnl.supplyCoverageMonths);
+      return pnl < -1500 || (Number.isFinite(coverage) && coverage < 0.72);
+    });
+
+    return {
+      cashRatio,
+      businessStress,
+      lowCash: cashRatio < 0.08,
+      mediumCash: cashRatio < 0.14
+    };
+  }
+
   function chooseEvent(state) {
     const day = state.time && state.time.day ? state.time.day : 1;
     const difficulty = state.player && state.player.difficulty ? state.player.difficulty : "normal";
@@ -451,6 +471,19 @@
     const negativeMultiplier = Number(settings.negativeEvents) || 1;
     if (isNegativeEvent(eventDefinition)) return Math.max(0.2, negativeMultiplier);
     return 1;
+  }
+
+  function getPlayerEventWeight(state, eventDefinition, difficulty) {
+    const base = getEventWeight(eventDefinition, difficulty);
+    const stress = getPlayerStressScore(state);
+    const severity = eventDefinition && eventDefinition.effect ? eventDefinition.effect.severity : "";
+    const positive = severity === "opportunity" || severity === "info";
+    const negative = severity === "warning" || severity === "critical";
+
+    if ((stress.lowCash || stress.businessStress) && positive) return base * 1.85;
+    if ((stress.lowCash || stress.businessStress) && negative) return Math.max(0.18, base * 0.42);
+    if (stress.mediumCash && positive) return base * 1.25;
+    return base;
   }
 
   function selectAffectedAssets(state, eventDefinition) {
@@ -710,7 +743,7 @@
       if (playerPool.length && Math.random() <= playerChance) {
         const weightedPool = playerPool.map((item) => ({
           item,
-          weight: getEventWeight(item, difficulty)
+          weight: getPlayerEventWeight(state, item, difficulty)
         }));
         const totalWeight = weightedPool.reduce((sum, entry) => sum + entry.weight, 0);
         let roll = Math.random() * Math.max(0.0001, totalWeight);
