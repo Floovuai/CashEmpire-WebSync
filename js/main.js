@@ -1278,6 +1278,7 @@
   }
 
   function handleMessageListClick(event) {
+    event.stopPropagation();
     const newsButton = event.target.closest("[data-message-open-news]");
     if (newsButton) {
       markMessageAndNewsRead(newsButton.dataset.messageId, newsButton.dataset.messageOpenNews);
@@ -1294,6 +1295,14 @@
     else expandedMessageIds.delete(messageId);
     if (willExpand) markMessageAndNewsRead(messageId, toggle.dataset.newsId);
     renderMessages();
+  }
+
+  function eventPathContains(event, element) {
+    if (!event || !element) return false;
+    if (typeof event.composedPath === "function") {
+      return event.composedPath().includes(element);
+    }
+    return element.contains(event.target);
   }
 
   function toggleMessageCenter() {
@@ -5960,7 +5969,7 @@
 
     document.addEventListener("click", (event) => {
       if (!els.messageCenter || els.messageCenter.hidden) return;
-      if (els.messageCenter.contains(event.target) || els.messageButton.contains(event.target)) return;
+      if (eventPathContains(event, els.messageCenter) || eventPathContains(event, els.messageButton)) return;
       closeMessageCenter();
     });
 
