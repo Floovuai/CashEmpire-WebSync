@@ -4,7 +4,7 @@
   const data = window.CashEmpireData;
   const economy = window.CashEmpireEconomy;
   const HISTORY_LIMIT = 90;
-  const MIN_PRICE = 0.01;
+  const MIN_PRICE = 0.000001;
 
   const DIFFICULTY_VOLATILITY = {
     facil: 0.72,
@@ -177,6 +177,30 @@
     return CATEGORY_MEAN_REVERSION[asset.type] || 0.04;
   }
 
+  function getValuationBounds(asset) {
+    if (asset.type === "crypto" && asset.isStablecoin) {
+      return { min: 0.97, max: 1.03 };
+    }
+
+    if (asset.type === "crypto" && asset.isSpeculative) {
+      const cap = clamp(toFiniteNumber(asset.momentumCap, asset.seedPrice < 0.01 ? 8 : 14), 2, 18);
+      return { min: 0.25, max: cap };
+    }
+
+    return { min: 0.2, max: 12 };
+  }
+
+  function getDailyLimitForAsset(asset) {
+    if (asset.type === "crypto" && asset.isStablecoin) return 0.012;
+    if (asset.type === "crypto" && asset.isSpeculative) {
+      const ratio = (asset.simPrice || asset.seedPrice || MIN_PRICE) / Math.max(MIN_PRICE, asset.priceAnchor || asset.seedPrice || MIN_PRICE);
+      if (ratio > 4) return 0.04;
+      if (ratio > 2) return 0.065;
+      return 0.11;
+    }
+    return getDailyLimit(asset.type);
+  }
+
   function getDailyLimit(type) {
     return CATEGORY_DAILY_LIMIT[type] || 0.08;
   }
@@ -221,7 +245,8 @@
     const value = Math.max(0, Number(orderValue) || 0);
     const dailyDollarVolume = Math.max(1, (asset.volume || 0) * (asset.simPrice || asset.seedPrice || 1));
     const liquidityPenalty = 1 / clamp(asset.liquidity || 0.5, 0.02, 1);
-    const impact = Math.pow(value / dailyDollarVolume, 0.72) * 0.035 * liquidityPenalty;
+    const speculativePenalty = asset.type === "crypto" && asset.isSpeculative ? 1.6 : 1;
+    const impact = Math.pow(value / dailyDollarVolume, 0.72) * 0.035 * liquidityPenalty * speculativePenalty;
 
     return clamp(impact, 0, 0.18);
   }
@@ -240,28 +265,48 @@
     const gdpGrowth = macro ? toFiniteNumber(macro.gdpGrowth, 0) : 0;
     const inflation = macro ? toFiniteNumber(macro.inflation, 0.03) : 0.03;
     const interestRate = macro ? toFiniteNumber(macro.interestRate, 0.04) : 0.04;
-    const driftAnnual = (toFiniteNumber(asset.driftAnnual, 0.03) + getLongTermReturnPremium(asset)) * marketDrift;
+    const anchorPrice = Math.max(MIN_PRICE, asset.priceAnchor || asset.seedPrice || MIN_PRICE);
+    const macroExposure = asset.type === "crypto" && asset.isStablecoin ? 0.08 : asset.type === "crypto" && asset.isSpeculative ? 0.72 : 1;
+    const driftPremium = asset.type === "crypto" && asset.isStablecoin ? 0 : getLongTermReturnPremium(asset);
+    const rawValuationRatio = (asset.simPrice || asset.seedPrice || MIN_PRICE) / anchorPrice;
+    const valuationBounds = getValuationBounds(asset);
+    const valuationRatio = clamp(rawValuationRatio, valuationBounds.min, Math.max(valuationBounds.min, rawValuationRatio));
+    let driftAnnual = (toFiniteNumber(asset.driftAnnual, 0.03) + driftPremium) * marketDrift;
+    if (asset.type === "crypto" && asset.isStablecoin) driftAnnual = 0;
+    if (asset.type === "crypto" && asset.isSpeculative) {
+      if (rawValuationRatio > 4) driftAnnual -= 0.2;
+      else if (rawValuationRatio > 2) driftAnnual -= 0.08;
+      else driftAnnual *= 0.55;
+    }
     const driftDaily = driftAnnual / 252;
     const rateDelta = getRateSensitivity(asset) * (interestRate - 0.04) / 365;
     const inflationDelta = getInflationSensitivity(asset) * (inflation - 0.03) / 365;
-    const growthDelta = (gdpGrowth / 252) * clamp(asset.beta || 1, -2, 2) * 0.35;
-    const sectorDelta = (sector.beta || 1) * macroDelta * 0.55 + getPhaseBias(asset, macro);
+    const growthDelta = (gdpGrowth / 252) * clamp(asset.beta || 1, -2, 2) * 0.35 * macroExposure;
+    const sectorDelta = ((sector.beta || 1) * macroDelta * 0.55 + getPhaseBias(asset, macro)) * macroExposure;
     const randomScale = 0.0075 * (asset.volatility || 1) * (sector.volatility || 1) * difficultyVolatility;
     const randomDelta = signedNoise(randomScale);
     const volatilityDrag = randomScale * randomScale * 0.18;
-    const valuationRatio = clamp((asset.simPrice || asset.seedPrice || MIN_PRICE) / Math.max(MIN_PRICE, asset.seedPrice || MIN_PRICE), 0.2, 12);
-    const meanReversion = -Math.log(valuationRatio) * getMeanReversionStrength(asset) / 252;
-    const sentimentDelta = sentiment * 0.00045 * clamp(asset.beta || 1, -2, 2);
-    const activeTypeDelta = eventImpact
+    let meanReversion = -Math.log(valuationRatio) * getMeanReversionStrength(asset) / 252;
+    if (asset.type === "crypto" && asset.isStablecoin) {
+      meanReversion = -Math.log(valuationRatio) * 18 / 252;
+    } else if (asset.type === "crypto" && asset.isSpeculative) {
+      const ratioPressure = rawValuationRatio > 4 ? 8.5 : rawValuationRatio > 2 ? 5.5 : 3.2;
+      meanReversion = -Math.log(valuationRatio) * ratioPressure / 252;
+    }
+    const sentimentDelta = sentiment * 0.00045 * clamp(asset.beta || 1, -2, 2) * macroExposure;
+    const activeTypeDelta = (eventImpact
       ? (Number(eventImpact.globalAssetDelta) || 0) +
         (Number(eventImpact.typeDeltas && eventImpact.typeDeltas[asset.type]) || 0) +
         (Number(eventImpact.sectorDeltas && eventImpact.sectorDeltas[asset.sector]) || 0)
-      : 0;
-    const dailyLimit = getDailyLimit(asset.type);
+      : 0) * macroExposure;
+    const dailyLimit = getDailyLimitForAsset(asset);
     const rawDelta = driftDaily + sectorDelta + growthDelta + rateDelta + inflationDelta + sentimentDelta + randomDelta + activeTypeDelta + meanReversion - volatilityDrag;
     const delta = clamp(rawDelta, -dailyLimit, dailyLimit);
     const previousSimPrice = asset.simPrice;
-    const simPrice = roundPrice(Math.max(MIN_PRICE, previousSimPrice * (1 + delta)));
+    const boundedPrice = previousSimPrice * (1 + delta);
+    const capFloorPrice = anchorPrice * valuationBounds.min;
+    const capCeilingPrice = anchorPrice * valuationBounds.max;
+    const simPrice = roundPrice(clamp(Math.max(MIN_PRICE, boundedPrice), capFloorPrice, capCeilingPrice));
     const volumeShock = 1 + Math.abs(delta) * 34 + Math.random() * 0.25;
     const volume = Math.max(0, Math.round((asset.baseDailyVolume || asset.volume || 1) * volumeShock));
     const liquidityDrift = asset.liquidity + signedNoise(0.006) - Math.abs(delta) * 0.015;

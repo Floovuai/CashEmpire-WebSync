@@ -403,6 +403,8 @@
 
   function createCrypto(row) {
     const [ticker, name, logoDomain, seedPrice, volatility, stakingYield] = row;
+    const isStablecoin = ticker === "USDC";
+    const isSpeculative = !isStablecoin && (seedPrice < 0.05 || volatility >= 4.5);
     return seededAsset({
       id: `crypto_${sanitizeId(ticker)}`,
       type: "crypto",
@@ -412,11 +414,15 @@
       logoDomain,
       seedPrice,
       volatility,
-      beta: ticker === "USDC" ? 0.02 : 1.55 + volatility * 0.08,
-      liquidity: ticker === "USDC" ? 0.96 : 0.58 + Math.max(0, 5 - volatility) * 0.07,
-      driftAnnual: ticker === "USDC" ? 0.005 : 0.01 + Math.min(volatility, 4) * 0.006,
+      priceAnchor: seedPrice,
+      isStablecoin,
+      isSpeculative,
+      momentumCap: isStablecoin ? 1.03 : (seedPrice < 0.01 ? 8 : 14),
+      beta: isStablecoin ? 0.01 : isSpeculative ? 1.18 + volatility * 0.04 : 1.4 + volatility * 0.06,
+      liquidity: isStablecoin ? 0.99 : isSpeculative ? 0.38 + Math.max(0, 5 - volatility) * 0.04 : 0.58 + Math.max(0, 5 - volatility) * 0.07,
+      driftAnnual: isStablecoin ? 0.001 : isSpeculative ? 0.004 + Math.min(volatility, 4) * 0.002 : 0.008 + Math.min(volatility, 4) * 0.005,
       stakingYield,
-      baseDailyVolume: ticker === "BTC" ? 340000 : ticker === "ETH" ? 2200000 : 800000
+      baseDailyVolume: isStablecoin ? 5200000 : ticker === "BTC" ? 340000 : ticker === "ETH" ? 2200000 : isSpeculative ? 420000 : 800000
     });
   }
 

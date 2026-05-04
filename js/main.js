@@ -115,7 +115,7 @@
     contribute: "Aporte mensual",
     inventory: "Insumos mensuales",
     marketing: "Marketing mensual",
-    rnd: "Inversion I+D mensual",
+    rnd: "I+D mensual",
     supplier_credit: "Credito proveedor mensual"
   };
 
@@ -3486,159 +3486,6 @@
     }
   }
 
-  function getBusinessSectorLabel(sector) {
-    const labels = {
-      food: "Gastronomia",
-      retail: "Retail",
-      services: "Servicios",
-      logistics: "Logistica",
-      construction: "Construccion",
-      software: "Software",
-      hospitality: "Hoteleria",
-      banking: "Banca",
-      real_estate: "Real estate",
-      energy: "Energia",
-      media: "Media"
-    };
-    return labels[sector] || sector || "Sector";
-  }
-
-  function getBusinessModifierMetrics(modifier, valuationWeight) {
-    const data = modifier || {};
-    const demandDelta = (Number(data.demand) || 1) - 1;
-    const costDelta = 1 - (Number(data.cost) || 1);
-    const valuationDelta = ((Number(data.valuation) || 1) - 1) * (Number(valuationWeight) || 1);
-    return [
-      { label: "Demanda", delta: demandDelta },
-      { label: "Costos", delta: costDelta },
-      { label: "Valor", delta: valuationDelta }
-    ];
-  }
-
-  function getBusinessModifierMetricHtml(metrics) {
-    return metrics.map((item) => {
-      const className = item.delta >= 0 ? "is-positive" : "is-negative";
-      return `<span><b>${escapeHtml(item.label)}</b><strong class="${className}">${formatSignedPercent(item.delta)}</strong></span>`;
-    }).join("");
-  }
-
-  function getOwnedBusinessSectors(excludedBusinessId) {
-    return new Set((Array.isArray(state && state.businesses) ? state.businesses : [])
-      .filter((item) => item && item.id !== excludedBusinessId)
-      .map((item) => item.sector)
-      .filter(Boolean));
-  }
-
-  function getBusinessSynergyPlan(business, synergy) {
-    const sectors = getOwnedBusinessSectors(business && business.id);
-    const businessSector = business && business.sector ? business.sector : "";
-    const activeLabel = synergy && synergy.label ? synergy.label : "";
-    const candidates = [];
-
-    if (!sectors.has("logistics") && !["logistics", "software"].includes(businessSector)) {
-      candidates.push({ sector: "logistics", text: "Sumar Logistica reduce costos de esta empresa." });
-    }
-    if (!sectors.has("software") && businessSector !== "software") {
-      candidates.push({ sector: "software", text: "Sumar Software eleva demanda y valoracion." });
-    }
-    if (!sectors.has("services") && ["retail", "food", "hospitality"].includes(businessSector)) {
-      candidates.push({ sector: "services", text: "Sumar Servicios refuerza demanda comercial." });
-    }
-    if (!sectors.has("hospitality") && businessSector === "food") {
-      candidates.push({ sector: "hospitality", text: "Sumar Hoteleria conecta trafico con gastronomia." });
-    }
-
-    const roleText = {
-      logistics: "Esta empresa baja costos a negocios no logisticos ni software.",
-      software: "Esta empresa impulsa demanda y valoracion de otros negocios.",
-      services: "Esta empresa mejora demanda en retail, gastronomia y hoteleria.",
-      hospitality: "Esta empresa mejora demanda de gastronomia."
-    }[businessSector] || "";
-
-    return {
-      active: Boolean(activeLabel),
-      label: activeLabel || "Sin red",
-      detail: activeLabel
-        ? `Red activa: ${activeLabel}.`
-        : candidates[0]
-          ? candidates[0].text
-          : roleText || "Sin palanca adicional para este sector.",
-      nextSector: candidates[0] ? candidates[0].sector : ""
-    };
-  }
-
-  function getBusinessGovernancePlan(business, takeover) {
-    const activeStage = takeover && takeover.stage && takeover.stage !== "none";
-    const influence = Math.max(0, Math.floor(Number(takeover && takeover.influence) || 0));
-    const opportunity = strategy && typeof strategy.getTakeoverOpportunities === "function"
-      ? strategy.getTakeoverOpportunities(state).find((item) => {
-        const ids = [business && business.sourceAssetId, business && business.id].filter(Boolean);
-        return ids.includes(item.assetId);
-      })
-      : null;
-    const nextStage = influence >= 62
-      ? "Control maximo activo."
-      : influence >= 36
-        ? "Siguiente meta: Control desde 62% de influencia."
-        : activeStage
-          ? "Siguiente meta: Consejo desde 36% de influencia."
-          : opportunity && opportunity.ready
-            ? `OPA lista: due diligence ${formatMoney(opportunity.cost)}.`
-            : opportunity
-              ? `Sube posicion: influencia ${opportunity.influence}% / meta 18%.`
-              : "Compra posicion relevante en una accion o empresa vinculada.";
-
-    return {
-      active: Boolean(activeStage),
-      label: activeStage ? takeover.label : "Sin influencia",
-      detail: nextStage,
-      hasRoute: Boolean(opportunity || activeStage)
-    };
-  }
-
-  function getBusinessStrategyPanelHtml(business, synergy, takeover) {
-    const synergyPlan = getBusinessSynergyPlan(business, synergy);
-    const governancePlan = getBusinessGovernancePlan(business, takeover);
-    const activeCount = (synergyPlan.active ? 1 : 0) + (governancePlan.active ? 1 : 0);
-    const synergyMetrics = getBusinessModifierMetricHtml(getBusinessModifierMetrics(synergy, 0.35));
-    const governanceMetrics = getBusinessModifierMetricHtml(getBusinessModifierMetrics(takeover, 0.55));
-    const synergyAction = synergyPlan.nextSector
-      ? `<button type="button" data-business-network-sector="${escapeHtml(synergyPlan.nextSector)}">Preparar ${escapeHtml(getBusinessSectorLabel(synergyPlan.nextSector))}</button>`
-      : "";
-    const governanceAction = governancePlan.hasRoute
-      ? `<button type="button" data-business-strategy-view="progress">Ver OPA</button>`
-      : "";
-
-    return `
-      <div class="business-strategy-panel">
-        <div class="business-strategy-head">
-          <span>Estrategia operativa</span>
-          <strong>${activeCount ? `${activeCount}/2 activas` : "Sin palancas"}</strong>
-        </div>
-        <div class="business-strategy-grid">
-          <article class="business-strategy-lever ${synergyPlan.active ? "active" : "neutral"}">
-            <div class="business-strategy-title">
-              <span>Sinergia</span>
-              <strong>${escapeHtml(synergyPlan.label)}</strong>
-            </div>
-            <div class="business-impact-strip">${synergyMetrics}</div>
-            <p>${escapeHtml(synergyPlan.detail)}</p>
-            ${synergyAction}
-          </article>
-          <article class="business-strategy-lever ${governancePlan.active ? "active" : "neutral"}">
-            <div class="business-strategy-title">
-              <span>Gobierno</span>
-              <strong>${escapeHtml(governancePlan.label)}</strong>
-            </div>
-            <div class="business-impact-strip">${governanceMetrics}</div>
-            <p>${escapeHtml(governancePlan.detail)}</p>
-            ${governanceAction}
-          </article>
-        </div>
-      </div>
-    `;
-  }
-
   function getBusinessAmountConfig(business, action) {
     const businessCash = getAmountLimit(business && business.cash);
     const supplierCreditAvailable = getSupplierCreditCapacity(business);
@@ -3680,7 +3527,7 @@
         buttonLabel: "Invertir en I+D",
         value: rndTargetAmount > 0
           ? String(Math.round(rndTargetAmount))
-          : getSuggestedAmount(Number(business.rndMonthlyBudget || 0) || Number(business.valuation || 0) * 0.001, businessCash, 250)
+          : getSuggestedAmount(Number(business.rnd || 0) * 0.25 || Number(business.valuation || 0) * 0.004, businessCash, 250)
       },
       supplier_credit: {
         label: "Credito proveedor",
@@ -4069,7 +3916,8 @@
     summary.businesses.forEach((business) => {
       const netLabel = business.monthlyPnl && business.monthlyPnl.estimated ? "Neto est." : "Neto";
       const incomeLabel = business.monthlyPnl && business.monthlyPnl.estimated ? "Ingresos est." : "Ingresos";
-      const runway = business.monthlyPnl.opex > 0 ? business.cash / business.monthlyPnl.opex : 99;
+      const runwayRaw = business.monthlyPnl.opex > 0 ? business.cash / business.monthlyPnl.opex : 99;
+      const runway = Number.isFinite(runwayRaw) ? runwayRaw : 99;
       const supplierScore = business.suppliers.length
         ? business.suppliers.reduce((sum, supplier) => sum + supplier.reliability, 0) / business.suppliers.length
         : business.suppliersReliability;
@@ -4159,7 +4007,6 @@
       const previousFinance = financialHistory[financialHistory.length - 2] || null;
       const netTrend = latestFinance && previousFinance ? latestFinance.netIncome - previousFinance.netIncome : 0;
       const trendInfo = getBusinessTrendInfo(business);
-      const rndMonthlyBudget = Number(business.rndMonthlyBudget) || 0;
       const contributionSuggestion = playerCashAvailable >= 1000
         ? String(Math.min(Math.max(1000, Math.round(business.valuation * 0.025)), playerCashAvailable))
         : "";
@@ -4204,8 +4051,7 @@
             <div><span>CxC</span><strong>${formatMoney(business.receivables || 0)}</strong></div>
             <div><span>Div. pend.</span><strong>${formatMoney(business.pendingDividends || 0)}</strong></div>
             <div><span>Confiabilidad</span><strong>${formatPercent(supplierScore)}</strong></div>
-            <div><span>I+D acum.</span><strong>${formatMoney(business.rnd || 0)}</strong></div>
-            <div><span>I+D mes</span><strong>${formatMoney(rndMonthlyBudget)}</strong></div>
+            <div><span>I+D</span><strong>${formatMoney(business.rnd || 0)}</strong></div>
             <div><span>Precio medio</span><strong>${formatPercent((business.priceIndex || 1) - 1)}</strong></div>
             <div><span>Franquicias</span><strong>${business.franchiseUnits || 0}</strong></div>
             <div><span>IPO</span><strong>${business.ipo && business.ipo.listed ? "Publica" : "Privada"}</strong></div>
@@ -4220,7 +4066,6 @@
             <div><span>Proy. anual</span><strong class="${trendInfo.className}">${formatSignedPercent(trendInfo.annualReturn)}</strong></div>
             <div><span>Valor 12m</span><strong>${formatMoney(trendInfo.projectedValue)}</strong></div>
           </div>
-          ${getBusinessStrategyPanelHtml(business, synergy, takeover)}
           <div class="staff-line">
             <span>Plantilla</span>
             <strong>${employeeCount} / ${requiredEmployees} necesarios</strong>
@@ -5440,28 +5285,6 @@
     persist(result.message);
   }
 
-  function handleBusinessStrategyAction(event) {
-    const networkButton = event.target.closest("[data-business-network-sector]");
-    if (networkButton) {
-      const sector = networkButton.dataset.businessNetworkSector;
-      if (els.businessSector && sector) {
-        els.businessSector.value = sector;
-      }
-      if (els.businessName && !els.businessName.value.trim()) {
-        els.businessName.value = `${getBusinessSectorLabel(sector)} ${Math.max(1, (state.businesses || []).length + 1)}`;
-      }
-      if (els.businessCapital) {
-        els.businessCapital.focus({ preventScroll: true });
-      }
-      showToast(`Formulario preparado para ${getBusinessSectorLabel(sector)}.`, "success");
-      return;
-    }
-
-    const viewButton = event.target.closest("[data-business-strategy-view]");
-    if (!viewButton) return;
-    openStrategicView(viewButton.dataset.businessStrategyView);
-  }
-
   function getBusinessContributionPanel(businessId) {
     return Array.from(els.businessList.querySelectorAll("[data-business-contribution-panel]"))
       .find((panel) => panel.dataset.businessContributionPanel === businessId) || null;
@@ -6108,7 +5931,6 @@
     els.businessForm.addEventListener("submit", submitBusiness);
     if (els.businessCapital) els.businessCapital.addEventListener("input", () => normalizeMoneyInput(els.businessCapital));
     els.businessList.addEventListener("click", handleBusinessAction);
-    els.businessList.addEventListener("click", handleBusinessStrategyAction);
     els.businessList.addEventListener("click", handleBusinessContributionClick);
     els.businessList.addEventListener("input", handleBusinessMoneyInput);
     els.businessList.addEventListener("submit", submitBusinessContribution);
