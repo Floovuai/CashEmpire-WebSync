@@ -19,6 +19,7 @@
   const bank = window.CashEmpireBank;
   const achievements = window.CashEmpireAchievements;
   const strategy = window.CashEmpireStrategy;
+  const decisions = window.CashEmpireDecisions;
 
   function nowIso() {
     return new Date().toISOString();
@@ -177,6 +178,9 @@
     const normalizedStrategy = strategy && typeof strategy.normalizeStrategy === "function"
       ? strategy.normalizeStrategy(value.strategy)
       : isObject(value.strategy) ? value.strategy : {};
+    const normalizedDecisions = decisions && typeof decisions.normalizeDecisionState === "function"
+      ? decisions.normalizeDecisionState(value.decisions)
+      : isObject(value.decisions) ? value.decisions : {};
     const onboarding = isObject(value.onboarding)
       ? {
         skipped: Boolean(value.onboarding.skipped),
@@ -217,6 +221,7 @@
       eventEffects: normalizedEventEffects,
       achievements: normalizedAchievements,
       strategy: normalizedStrategy,
+      decisions: normalizedDecisions,
       onboarding,
       messages,
       activity: Array.isArray(value.activity) ? value.activity : [],
@@ -275,6 +280,9 @@
       strategy: strategy && typeof strategy.createInitialStrategy === "function"
         ? strategy.createInitialStrategy({ scenario })
         : { scenario: typeof scenario === "string" ? scenario : "free" },
+      decisions: decisions && typeof decisions.createInitialDecisionState === "function"
+        ? decisions.createInitialDecisionState()
+        : {},
       onboarding: {
         skipped: false,
         guideSeen: false,

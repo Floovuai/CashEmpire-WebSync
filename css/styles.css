@@ -6670,6 +6670,7 @@ input[data-money-input] {
 
 .advisor-list,
 .contract-list,
+.decision-history,
 .hedge-list,
 .takeover-list,
 .watchlist-list {
@@ -6678,6 +6679,7 @@ input[data-money-input] {
 }
 
 .advisor-card,
+.decision-card,
 .weekly-contract,
 .hedge-row,
 .takeover-row,
@@ -6702,6 +6704,7 @@ input[data-money-input] {
 .watchlist-row button,
 .hedge-row button,
 .takeover-row button,
+.decision-option button,
 .alert-item button {
   min-height: 34px;
   border: 1px solid rgba(114, 248, 224, 0.22);
@@ -6782,6 +6785,64 @@ input[data-money-input] {
   grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+}
+
+.decision-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.decision-card small {
+  color: var(--muted);
+}
+
+.decision-modal {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.decision-context {
+  display: grid;
+  gap: var(--space-sm);
+  padding: 12px;
+  border: 1px solid rgba(114, 248, 224, 0.16);
+  border-radius: var(--radius);
+  background: rgba(7, 13, 17, 0.74);
+}
+
+.decision-context strong {
+  font-size: 1rem;
+}
+
+.decision-context p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.decision-options {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.decision-option {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(114, 248, 224, 0.16);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.decision-option strong,
+.decision-option p,
+.decision-option small {
+  margin: 0;
+}
+
+.decision-option p,
+.decision-option small {
+  color: var(--muted);
 }
 
 .legacy-status > div {

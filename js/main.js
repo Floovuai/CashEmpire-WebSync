@@ -9,6 +9,7 @@
   const businesses = window.CashEmpireBusinesses;
   const taxes = window.CashEmpireTaxes;
   const strategy = window.CashEmpireStrategy;
+  const decisions = window.CashEmpireDecisions;
   const bank = window.CashEmpireBank;
   const achievements = window.CashEmpireAchievements;
   const cloudSync = window.CashEmpireCloudSync;
@@ -365,6 +366,9 @@
     newsTickerText: q("#news-ticker-text"),
     achievementCount: q("#achievement-count"),
     achievementList: q("#achievement-list"),
+    decisionCount: q("#decision-count"),
+    decisionHistory: q("#decision-history"),
+    decisionEmpty: q("#decision-empty"),
     legacyClaim: q("#legacy-claim"),
     legacyStatus: q("#legacy-status"),
     takeoverList: q("#takeover-list"),
@@ -397,6 +401,14 @@
     tradeTotal: q("#trade-total"),
     tradeImpact: q("#trade-impact"),
     tradeConfirm: q("#trade-confirm"),
+    decisionModal: q("#decision-modal"),
+    decisionKicker: q("#decision-kicker"),
+    decisionTitle: q("#decision-title"),
+    decisionSubtitle: q("#decision-subtitle"),
+    decisionContext: q("#decision-context"),
+    decisionOptions: q("#decision-options"),
+    decisionError: q("#decision-error"),
+    decisionClose: q("#decision-close"),
     dashboardTitle: q("#dashboard-title"),
     nextDecision: q("#next-decision"),
     activityList: q("#activity-list"),
@@ -1580,6 +1592,9 @@
       state.strategy = strategy.normalizeStrategy(state.strategy);
       if (typeof strategy.refreshContracts === "function") strategy.refreshContracts(state);
     }
+    if (decisions && typeof decisions.normalizeDecisionState === "function") {
+      state.decisions = decisions.normalizeDecisionState(state.decisions);
+    }
     ensureOnboardingState();
     ensureMessageState();
     if (player && player.normalizeAssetOperations) {
@@ -2452,6 +2467,72 @@
         els.takeoverList.appendChild(row);
       });
     }
+  }
+
+  function openDecisionModal() {
+    if (!state || !els.decisionModal || !state.decisions || !state.decisions.pending) return;
+    els.decisionError.textContent = "";
+    els.decisionModal.hidden = false;
+  }
+
+  function closeDecisionModal() {
+    if (!els.decisionModal) return;
+    els.decisionModal.hidden = true;
+    if (els.decisionError) els.decisionError.textContent = "";
+  }
+
+  function renderDecisionCenter() {
+    const decisionState = state && state.decisions ? state.decisions : { history: [], pending: null };
+    const history = Array.isArray(decisionState.history) ? decisionState.history.slice().reverse() : [];
+    if (els.decisionCount) els.decisionCount.textContent = String(history.length);
+    if (els.decisionEmpty) els.decisionEmpty.hidden = history.length > 0;
+    if (els.decisionHistory) {
+      els.decisionHistory.innerHTML = "";
+      history.forEach((entry) => {
+        const card = document.createElement("article");
+        card.className = "decision-card";
+        card.innerHTML = `
+          <strong>Dia ${entry.day}: ${escapeHtml(entry.title)}</strong>
+          <span>${escapeHtml(entry.businessName || (entry.type === "portfolio" ? "Cartera" : "Imperio"))} · ${escapeHtml(entry.choiceLabel)}</span>
+          <small>${escapeHtml(entry.impactText || entry.summary || "Decision registrada.")}</small>
+        `;
+        els.decisionHistory.appendChild(card);
+      });
+    }
+
+    if (!els.decisionContext || !els.decisionOptions) return;
+    const pending = decisionState.pending;
+    if (!pending) {
+      closeDecisionModal();
+      return;
+    }
+
+    if (els.decisionKicker) {
+      els.decisionKicker.textContent = pending.type === "portfolio" ? "Decision de cartera" : `Decision ejecutiva · ${pending.businessName || "Negocio"}`;
+    }
+    if (els.decisionTitle) els.decisionTitle.textContent = pending.title || "Decision ejecutiva";
+    if (els.decisionSubtitle) {
+      els.decisionSubtitle.textContent = pending.type === "portfolio"
+        ? "El contexto cambió y puedes reaccionar sin navegar por varias pantallas."
+        : "Elige una respuesta con trade-offs visibles antes de seguir avanzando.";
+    }
+    els.decisionContext.innerHTML = `
+      <strong>${escapeHtml(pending.businessName || "Mesa ejecutiva")}</strong>
+      <p>${escapeHtml(pending.body || "Hay una decision pendiente.")}</p>
+    `;
+    els.decisionOptions.innerHTML = "";
+    pending.options.forEach((option) => {
+      const article = document.createElement("article");
+      article.className = "decision-option";
+      article.innerHTML = `
+        <strong>${escapeHtml(option.label)}</strong>
+        <p>${escapeHtml(option.body)}</p>
+        <small>${escapeHtml(option.impactText || "")}</small>
+        <button type="button" data-decision-option="${escapeHtml(option.id)}">Elegir</button>
+      `;
+      els.decisionOptions.appendChild(article);
+    });
+    openDecisionModal();
   }
 
   function clampNumber(value, min, max) {
@@ -4564,6 +4645,7 @@
     renderHedges();
     renderNews();
     renderAchievements();
+    renderDecisionCenter();
     renderLegacy();
     renderActivity();
     renderMessages();
@@ -5072,6 +5154,18 @@
         });
       });
     }
+    if (decisions && typeof decisions.processDay === "function") {
+      const decisionOutcome = decisions.processDay(state);
+      if (decisionOutcome && decisionOutcome.message) {
+        entries.push({ type: "decision", text: decisionOutcome.message });
+        pushMessage({
+          key: `decision:${decisionOutcome.decision && decisionOutcome.decision.id ? decisionOutcome.decision.id : state.time.day}`,
+          category: "business",
+          title: decisionOutcome.decision && decisionOutcome.decision.title ? decisionOutcome.decision.title : "Decision ejecutiva",
+          body: decisionOutcome.message
+        });
+      }
+    }
 
     if (state.macro && previousPhase && state.macro.phase !== previousPhase) {
       entries.push({ type: "macro", text: `El ciclo cambio a ${state.macro.phaseLabel}. Presion macro: ${state.macro.pressure}.` });
@@ -5095,6 +5189,11 @@
 
   function advanceDays(days) {
     if (!state) return;
+    if (state.decisions && state.decisions.pending) {
+      openDecisionModal();
+      showToast("Hay una decision ejecutiva pendiente antes de avanzar.", "warning");
+      return;
+    }
     if (strategy && typeof strategy.getAdvanceWarning === "function") {
       const warning = strategy.getAdvanceWarning(state, days);
       if (warning && !window.confirm(`${warning}\n\nDeseas avanzar de todos modos?`)) return;
@@ -5229,6 +5328,20 @@
       showToast(result.message, "error");
       return;
     }
+    pushActivity(result.message);
+    persist(result.message);
+  }
+
+  function handleDecisionAction(event) {
+    const button = event.target.closest("[data-decision-option]");
+    if (!button || !decisions || !state) return;
+    const result = decisions.resolvePendingDecision(state, button.dataset.decisionOption);
+    if (!result.ok) {
+      if (els.decisionError) els.decisionError.textContent = result.message;
+      showToast(result.message, "error");
+      return;
+    }
+    closeDecisionModal();
     pushActivity(result.message);
     persist(result.message);
   }
@@ -5901,6 +6014,13 @@
     els.tradeModal.addEventListener("click", (event) => {
       if (event.target === els.tradeModal) closeTradeModal();
     });
+    if (els.decisionClose) els.decisionClose.addEventListener("click", closeDecisionModal);
+    if (els.decisionOptions) els.decisionOptions.addEventListener("click", handleDecisionAction);
+    if (els.decisionModal) {
+      els.decisionModal.addEventListener("click", (event) => {
+        if (event.target === els.decisionModal) closeDecisionModal();
+      });
+    }
     if (els.assetDetailClose) els.assetDetailClose.addEventListener("click", closeAssetDetail);
     if (els.assetDetailModal) {
       els.assetDetailModal.addEventListener("click", (event) => {

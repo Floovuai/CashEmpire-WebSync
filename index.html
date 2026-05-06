@@ -727,6 +727,18 @@
           <div class="achievement-list" id="achievement-list"></div>
         </article>
 
+        <article class="panel panel-wide decisions-panel view-panel" data-view-panel="progress" hidden>
+          <div class="panel-head">
+            <div>
+              <h3>Decisiones ejecutivas</h3>
+              <p>Historial de trade-offs operativos y rebalanceos recientes.</p>
+            </div>
+            <strong id="decision-count">0</strong>
+          </div>
+          <div class="decision-history" id="decision-history"></div>
+          <div class="empty-state" id="decision-empty">Aun no has tomado decisiones ejecutivas.</div>
+        </article>
+
         <article class="panel panel-wide legacy-panel view-panel" data-view-panel="progress" hidden>
           <div class="panel-head">
             <div>
@@ -908,11 +920,28 @@
     </section>
   </div>
 
+  <div class="modal-backdrop" id="decision-modal" hidden>
+    <section class="modal decision-modal" role="dialog" aria-modal="true" aria-labelledby="decision-title">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow" id="decision-kicker">Decision ejecutiva</p>
+          <h2 id="decision-title">Trade-off operativo</h2>
+          <p id="decision-subtitle">Elige una direccion antes de seguir avanzando.</p>
+        </div>
+        <button class="icon-button modal-close" id="decision-close" type="button" aria-label="Cerrar decision">X</button>
+      </div>
+      <div class="decision-context" id="decision-context"></div>
+      <div class="decision-options" id="decision-options"></div>
+      <p class="field-error" id="decision-error" aria-live="polite"></p>
+    </section>
+  </div>
+
   <script src="js/data.js"></script>
   <script src="js/economy.js"></script>
   <script src="js/market.js"></script>
   <script src="js/taxes.js"></script>
   <script src="js/strategy.js"></script>
+  <script src="js/decisions.js"></script>
   <script src="js/player.js"></script>
   <script src="js/events.js"></script>
   <script src="js/businesses.js"></script>

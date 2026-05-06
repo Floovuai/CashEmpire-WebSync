@@ -6,6 +6,7 @@
   const taxes = window.CashEmpireTaxes;
   const player = window.CashEmpirePlayer;
   const strategy = window.CashEmpireStrategy;
+  const decisions = window.CashEmpireDecisions;
   const MAX_BUSINESSES = 36;
   const PRODUCTIVITY_TARGET = 1;
   const RND_PRODUCTIVITY_GAIN = 0.18;
@@ -1151,12 +1152,16 @@
     const takeover = strategy && typeof strategy.getTakeoverBusinessModifiers === "function"
       ? strategy.getTakeoverBusinessModifiers(state, business)
       : { demand: 1, cost: 1, valuation: 1, label: "Sin influencia", stage: "none" };
-    const demand = defaults.demand * unitsFactor * macroFactor * marketingFactor * staffCapacity * reputationFactor * pricePenalty * supplyFactor * locationFactors.demand * difficultySettings.demand * randomFactor * matureOperatorBoost * eventRevenueFactor * capitalizationDemandFactor * (Number(synergy.demand) || 1) * (Number(takeover.demand) || 1);
+    const decisionModifiers = decisions && typeof decisions.getBusinessDecisionModifiers === "function"
+      ? decisions.getBusinessDecisionModifiers(state, business)
+      : { demand: 1, cost: 1, valuation: 1, reputation: 0, labels: [] };
+    const effectiveReputation = clamp(reputationFactor + (Number(decisionModifiers.reputation) || 0) * 0.22, 0.68, 1.42);
+    const demand = defaults.demand * unitsFactor * macroFactor * marketingFactor * staffCapacity * effectiveReputation * pricePenalty * supplyFactor * locationFactors.demand * difficultySettings.demand * randomFactor * matureOperatorBoost * eventRevenueFactor * capitalizationDemandFactor * (Number(synergy.demand) || 1) * (Number(takeover.demand) || 1) * (Number(decisionModifiers.demand) || 1);
     const unitsSold = staffCapacity <= 0 ? 0 : Math.max(0, Math.round(demand));
     const revenue = roundMoney(unitsSold * defaults.baseTicket * business.priceIndex * locationFactors.rent);
     const royaltyIncome = roundMoney(business.franchiseUnits * defaults.baseTicket * defaults.demand * business.royaltyRate * 0.42);
     const supplyState = normalizeSupplyState(business.supplies, business.sector, business.inventory);
-    const supplyUnitCost = roundMoney(Math.max(0.01, supplyState.unitCost * eventCostFactor * difficultySettings.cost * (Number(synergy.cost) || 1) * (Number(takeover.cost) || 1)));
+    const supplyUnitCost = roundMoney(Math.max(0.01, supplyState.unitCost * eventCostFactor * difficultySettings.cost * (Number(synergy.cost) || 1) * (Number(takeover.cost) || 1) * (Number(decisionModifiers.cost) || 1)));
     const supplyNeededUnits = roundUnits(unitsSold);
     const availableSupplyUnits = supplyState.stockUnits;
     const stockoutPenalty = supplyNeededUnits > 0
@@ -1276,7 +1281,7 @@
     const valuationMemory = business.type === "startup" ? 0.86 : 0.82;
     business.valuation = roundMoney(Math.max(
       valuationFloor,
-      (business.valuation * valuationMemory + targetValuation * (1 - valuationMemory)) * synergyValuationLift * difficultySettings.valuation * takeoverValuationLift
+      (business.valuation * valuationMemory + targetValuation * (1 - valuationMemory)) * synergyValuationLift * difficultySettings.valuation * takeoverValuationLift * (Number(decisionModifiers.valuation) || 1)
     ));
     const reserve = Math.max(1000, opex * 0.55 + supplierPayments * 0.35);
     const distributableByCash = roundMoney(Math.max(0, business.cash - reserve));
@@ -1307,6 +1312,7 @@
       receivablesCreated: newReceivables,
       synergyLabel: synergy.label || "",
       governanceLabel: takeover.label || "Sin influencia",
+      decisionLabel: Array.isArray(decisionModifiers.labels) && decisionModifiers.labels.length ? decisionModifiers.labels.join(" + ") : "",
       estimated: false
     };
     business.financialHistory = (Array.isArray(business.financialHistory) ? business.financialHistory : []).concat({

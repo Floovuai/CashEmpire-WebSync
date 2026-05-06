@@ -5,6 +5,7 @@
   const taxesModule = window.CashEmpireTaxes;
   const economy = window.CashEmpireEconomy;
   const strategy = window.CashEmpireStrategy;
+  const decisions = window.CashEmpireDecisions;
 
   const COMMISSION_RATES = {
     stock: 0.0015,
@@ -955,7 +956,10 @@
         const takeoverDividendModifier = strategy && typeof strategy.getTakeoverDividendModifier === "function"
           ? strategy.getTakeoverDividendModifier(state, asset.id)
           : 1;
-        gross = roundMoney(position.value * asset.dividendYield / 4 * passiveMultiplier * takeoverDividendModifier);
+        const portfolioDecisionModifier = decisions && typeof decisions.getPortfolioDecisionModifiers === "function"
+          ? decisions.getPortfolioDecisionModifiers(state).dividendMultiplier
+          : 1;
+        gross = roundMoney(position.value * asset.dividendYield / 4 * passiveMultiplier * takeoverDividendModifier * portfolioDecisionModifier);
         label = `Dividendo ${asset.ticker || asset.name}`;
         type = "dividend";
       }
