@@ -149,15 +149,15 @@
   ];
 
   const CONTRACT_REWARD_MULTIPLIERS = {
-    first_buy: 1.2,
+    first_buy: 1.28,
     active_trade: 1.08,
-    watchlist: 0.62,
-    diversify: 1.2,
-    cash_guard: 0.34,
-    risk_guard: 0.52,
-    read_news: 0.24,
-    business_health: 1.24,
-    hedge: 1.08
+    watchlist: 0.46,
+    diversify: 1.3,
+    cash_guard: 0.26,
+    risk_guard: 0.44,
+    read_news: 0.16,
+    business_health: 1.46,
+    hedge: 1.2
   };
 
   const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
@@ -810,10 +810,20 @@
 
     if (PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
       const hasEconomicExposure = metrics.positions.length > 0 || metrics.hasBusiness || metrics.debtCount > 0;
-      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.7 : 0;
+      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.6 : 0;
       rewardPower = Math.max(1, rewardPower - 1);
     } else if (SUPPORT_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
       rewardMultiplier *= metrics.positions.length > 0 || metrics.hasBusiness ? 1 : 0.45;
+    }
+
+    if (!PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions >= 2) {
+      rewardMultiplier *= 1.08;
+      rewardPower += 1;
+    }
+
+    if (kind === "business_health" && metrics.businessStress) {
+      rewardMultiplier *= 1.12;
+      rewardPower += 1;
     }
 
     const rewardCash = Math.max(0, Math.round(baseReward * rewardMultiplier));
@@ -878,13 +888,26 @@
     pushUniqueContractKind(selected, metrics.hasBusiness ? "business_health" : metrics.hasHedge ? "risk_guard" : "hedge", state, metrics);
     pushUniqueContractKind(
       selected,
-      metrics.riskScore > 52
-        ? "risk_guard"
+      metrics.hasBusiness && metrics.businessStress
+        ? "business_health"
+        : metrics.riskScore > 52
+          ? "risk_guard"
+          : metrics.watchlistCount < 3
+            ? "watchlist"
+            : metrics.unread > 0
+              ? "read_news"
+              : "cash_guard",
+      state,
+      metrics
+    );
+
+    pushUniqueContractKind(
+      selected,
+      metrics.riskScore > 52 && !metrics.hasHedge
+        ? "hedge"
         : metrics.watchlistCount < 3
-          ? "watchlist"
-          : metrics.unread > 0
-            ? "read_news"
-            : "cash_guard",
+          ? "diversify"
+          : "cash_guard",
       state,
       metrics
     );

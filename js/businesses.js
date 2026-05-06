@@ -1049,6 +1049,24 @@
     return 1;
   }
 
+  function getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths) {
+    const typeBoost = business && business.type === "startup" ? 0.08 : 0;
+    const shortageBoost = clamp(shortageRatio * 0.45, 0, 0.2);
+    const lowCoverageBoost = supplyCoverageMonths < 0.9
+      ? clamp((0.9 - supplyCoverageMonths) * 0.26, 0, 0.12)
+      : 0;
+    return clamp(0.62 + typeBoost + shortageBoost + lowCoverageBoost, 0.58, 0.88);
+  }
+
+  function getIntangibleSpendBudget(business, operatingReadiness, spendType) {
+    const intensity = spendType === "rnd"
+      ? clamp(0.08 + operatingReadiness * 0.05, 0.08, 0.14)
+      : clamp(0.1 + operatingReadiness * 0.06, 0.1, 0.16);
+    const floor = spendType === "rnd" ? 120 : 180;
+    const source = Math.max(0, Number(spendType === "rnd" ? business.rnd : business.marketing) || 0);
+    return roundMoney(Math.min(source, Math.max(0, source * intensity, floor)));
+  }
+
   function processBusinessMonth(state, business, eventImpact) {
     const snapshot = {
       revenue: roundMoney(Number(business.monthlyPnl && business.monthlyPnl.revenue) || 0),
@@ -1071,7 +1089,11 @@
       return sum + unit.level * clamp(conditionLift, 0.9, 1.16);
     }, 0);
     const macroFactor = getMacroDemandFactor(state);
-    const marketingFactor = clamp(0.72 + Math.log10(1 + business.marketing / 900) * 0.16 + startupSupportLevel * 0.12, 0.72, 1.4);
+    const marketingFactor = clamp(
+      0.78 + Math.log10(1 + business.marketing / 750) * 0.18 + startupSupportLevel * 0.12,
+      0.78,
+      1.44
+    );
     const requiredEmployees = getRequiredEmployees(business);
     business.requiredEmployees = requiredEmployees;
     const staffCapacity = clamp(business.employees / requiredEmployees, 0, 1.35);
@@ -1121,7 +1143,11 @@
     const stockAfterUse = roundUnits(Math.max(0, supplyAfterSales - wastedUnits));
     const targetStockUnits = roundUnits(Math.max(supplyNeededUnits, supplyNeededUnits * supplyState.minCoverageMonths));
     const restockGapUnits = roundUnits(Math.max(0, targetStockUnits - stockAfterUse));
-    const restockTargetCost = roundMoney(restockGapUnits * supplyState.unitCost * (isStartupSupportActive ? 0.38 : 0.45));
+    const shortageRatio = supplyNeededUnits > 0 ? shortageUnits / Math.max(1, supplyNeededUnits) : 0;
+    const supplyCoverageMonths = supplyNeededUnits > 0 ? stockAfterUse / Math.max(1, supplyNeededUnits) : 99;
+    const restockCoverage = getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths);
+    const startupRestockRelief = isStartupSupportActive ? Math.max(0.76, 1 - startupSupportLevel * 0.6) : 1;
+    const restockTargetCost = roundMoney(restockGapUnits * supplyState.unitCost * restockCoverage * startupRestockRelief);
     const restockQuote = restockTargetCost > 0
       ? getProcurementQuote(business, restockTargetCost)
       : { amount: 0, unitCost: supplyState.unitCost, deliveryRate: 1, purchasedUnits: 0 };
@@ -1137,8 +1163,8 @@
     const interest = roundMoney(business.debt * 0.01);
     const openingCash = roundMoney(business.cash);
     const supplierPayments = processSupplierPayables(business);
-    const activeMarketing = roundMoney(business.marketing * operatingReadiness * 0.42);
-    const activeRnd = roundMoney(business.rnd * operatingReadiness * 0.3);
+    const activeMarketing = getIntangibleSpendBudget(business, operatingReadiness, "marketing");
+    const activeRnd = getIntangibleSpendBudget(business, operatingReadiness, "rnd");
     const opex = roundMoney(payroll + rent + activeMarketing + activeRnd + maintenance + interest);
     const ebitda = roundMoney(adjustedRevenue - adjustedCogs - opex + interest);
     const taxResult = taxes && taxes.applyBusinessTax ? taxes.applyBusinessTax(state, ebitda) : { tax: Math.max(0, ebitda * 0.21) };
@@ -1160,6 +1186,8 @@
       lastDeliveryRate: restockQuote.deliveryRate
     };
     syncBusinessInventory(business);
+    business.marketing = roundMoney(Math.max(0, business.marketing - activeMarketing * 0.82));
+    business.rnd = roundMoney(Math.max(0, business.rnd - activeRnd * 0.7));
     business.cash = roundMoney(Math.max(0, projectedCash));
     business.receivables = roundMoney(Math.max(0, business.receivables + newReceivables));
     if (shortfall > 0) {
@@ -1169,9 +1197,29 @@
     }
     const reportedCashFlow = roundMoney(business.cash - openingCash - shortfall);
     business.suppliersReliability = clamp(business.suppliersReliability + (eventSupplierFactor - 1) * 0.18, 0.25, 1);
-    business.reputation = clamp(business.reputation + (netIncome >= 0 ? 0.012 : -0.018) + (stockoutPenalty < 1 ? -0.035 : 0) + (Number(impact.business && impact.business.reputationDelta) || 0) + startupSupportLevel * 0.012, 0.05, 1.2);
-    business.morale = clamp(business.morale + (netIncome >= 0 ? 0.008 : -0.014) + (Number(impact.business && impact.business.moraleDelta) || 0) + startupSupportLevel * 0.015, 0.1, 1.1);
-    business.productivity = clamp(business.productivity + business.rnd / Math.max(1, business.valuation) * 0.06 - 0.004 + startupSupportLevel * 0.012, 0.1, 1.4);
+    business.reputation = clamp(
+      business.reputation +
+      (netIncome >= 0 ? 0.014 : -0.011) +
+      (stockoutPenalty < 1 ? -0.018 - shortageRatio * 0.02 : 0.004) +
+      (Number(impact.business && impact.business.reputationDelta) || 0) +
+      startupSupportLevel * 0.012,
+      0.05,
+      1.2
+    );
+    business.morale = clamp(
+      business.morale +
+      (netIncome >= 0 ? 0.01 : -0.009) +
+      (stockoutPenalty < 0.85 ? -0.01 : 0.003) +
+      (Number(impact.business && impact.business.moraleDelta) || 0) +
+      startupSupportLevel * 0.015,
+      0.1,
+      1.1
+    );
+    business.productivity = clamp(
+      business.productivity + activeRnd / Math.max(1, business.valuation) * 0.08 - 0.0025 + startupSupportLevel * 0.012,
+      0.1,
+      1.4
+    );
     const synergyValuationLift = 1 + ((Number(synergy.valuation) || 1) - 1) * 0.35;
     const takeoverValuationLift = 1 + ((Number(takeover.valuation) || 1) - 1) * 0.55;
     business.valuation = roundMoney(Math.max(
