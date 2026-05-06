@@ -31,6 +31,20 @@
     media: { label: "Media", grossMargin: 0.68, baseTicket: 25, demand: 940, unitType: "estudio", staffPerUnit: 4 }
   };
 
+  const SECTOR_VALUATION_MULTIPLIERS = {
+    food: 2.7,
+    retail: 2.5,
+    services: 3.1,
+    logistics: 2.3,
+    construction: 2.1,
+    software: 3.8,
+    hospitality: 2.9,
+    banking: 3.4,
+    real_estate: 3,
+    energy: 2.4,
+    media: 3
+  };
+
   const SUPPLIER_PRESETS = {
     food: ["Proveedor alimentos", "Distribuidor bebidas"],
     retail: ["Mayorista regional", "Importador directo"],
@@ -978,7 +992,7 @@
     const startupCash = roundMoney(Math.max(capital * 0.2, capital - upfrontCommitment));
     const seedValuation = roundMoney(Math.max(capital * 0.72, capital - setupCost * 0.62 - payrollReserve * 0.25));
     const valuation = roundMoney(Math.max(seedValuation, capital - setupCost * 0.34));
-    const startupSupportLevel = clamp(0.1 + Math.min(0.18, capital / 250000), 0.1, 0.28);
+    const startupSupportLevel = clamp(0.08 + Math.min(0.14, capital / 300000), 0.08, 0.22);
     const business = normalizeBusiness({
       id: createId("biz"),
       sourceAssetId: null,
@@ -1003,7 +1017,7 @@
       suppliers: createDefaultSuppliers(sector),
       units: startupUnits,
       createdDay: foundedDay,
-      startupSupportUntilDay: foundedDay + 120,
+      startupSupportUntilDay: foundedDay + 90,
       startupSupportLevel
     });
 
@@ -1049,11 +1063,27 @@
     return 1;
   }
 
+  function getBusinessValuationMultiple(business) {
+    const base = SECTOR_VALUATION_MULTIPLIERS[business && business.sector] || 2.8;
+    const scaleLift = Math.min(0.55, Math.log10(1 + Math.max(0, Number(business && business.seedValuation) || 0) / 25000) * 0.22);
+    return clamp(base + scaleLift, 1.8, 4.6);
+  }
+
+  function recordBusinessActivity(state, business, action, weight) {
+    if (!strategy || typeof strategy.recordActivity !== "function") return;
+    strategy.recordActivity(state, `business_${action}`, {
+      day: state && state.time ? state.time.day : 1,
+      scope: "business",
+      businessId: business && business.id ? business.id : "",
+      weight
+    });
+  }
+
   function getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths) {
-    const typeBoost = business && business.type === "startup" ? 0.08 : 0;
+    const typeBoost = business && business.type === "startup" ? 0.05 : 0;
     const shortageBoost = clamp(shortageRatio * 0.45, 0, 0.2);
     const lowCoverageBoost = supplyCoverageMonths < 0.9
-      ? clamp((0.9 - supplyCoverageMonths) * 0.26, 0, 0.12)
+      ? clamp((0.9 - supplyCoverageMonths) * 0.22, 0, 0.1)
       : 0;
     return clamp(0.62 + typeBoost + shortageBoost + lowCoverageBoost, 0.58, 0.88);
   }
@@ -1083,27 +1113,27 @@
     const currentDay = Math.max(1, Math.floor(Number(state.time && state.time.day) || 1));
     const isStartupSupportActive = business.type === "startup"
       && (Number(business.startupSupportUntilDay) || 0) >= currentDay;
-    const startupSupportLevel = isStartupSupportActive ? clamp(Number(business.startupSupportLevel) || 0, 0, 0.35) : 0;
+    const startupSupportLevel = isStartupSupportActive ? clamp(Number(business.startupSupportLevel) || 0, 0, 0.28) : 0;
     const unitsFactor = business.units.reduce((sum, unit) => {
       const conditionLift = 0.85 + unit.condition * 0.25;
       return sum + unit.level * clamp(conditionLift, 0.9, 1.16);
     }, 0);
     const macroFactor = getMacroDemandFactor(state);
     const marketingFactor = clamp(
-      0.78 + Math.log10(1 + business.marketing / 750) * 0.18 + startupSupportLevel * 0.12,
+      0.78 + Math.log10(1 + business.marketing / 750) * 0.18 + startupSupportLevel * 0.08,
       0.78,
       1.44
     );
     const requiredEmployees = getRequiredEmployees(business);
     business.requiredEmployees = requiredEmployees;
     const staffCapacity = clamp(business.employees / requiredEmployees, 0, 1.35);
-    const operatingReadiness = clamp(0.35 + staffCapacity * 0.65 + startupSupportLevel * 0.18, 0.35, 1.24);
-    const reputationFactor = clamp(0.72 + business.reputation * 0.52 + startupSupportLevel * 0.06, 0.72, 1.36);
+    const operatingReadiness = clamp(0.35 + staffCapacity * 0.65 + startupSupportLevel * 0.12, 0.35, 1.2);
+    const reputationFactor = clamp(0.72 + business.reputation * 0.52 + startupSupportLevel * 0.04, 0.72, 1.32);
     const pricePenalty = business.priceIndex > 1.12 ? 1 - (business.priceIndex - 1.12) * 0.9 : 1 + (1 - business.priceIndex) * 0.14;
     const supplyFactor = clamp(0.62 + supplierScores.reliability * 0.36 + supplierQuality * 0.06, 0.65, 1.08);
     const randomFactor = 0.95 + Math.random() * (isStartupSupportActive ? 0.16 : 0.14);
     const matureOperatorBoost = business.type === "startup"
-      ? clamp(0.84 + staffCapacity * 0.16 + business.reputation * 0.04 + startupSupportLevel * 0.24, 0.82, 1.08)
+      ? clamp(0.84 + staffCapacity * 0.16 + business.reputation * 0.04 + startupSupportLevel * 0.14, 0.82, 1.05)
       : 1.03;
     const eventRevenueFactor = clamp(
       1 +
@@ -1146,7 +1176,7 @@
     const shortageRatio = supplyNeededUnits > 0 ? shortageUnits / Math.max(1, supplyNeededUnits) : 0;
     const supplyCoverageMonths = supplyNeededUnits > 0 ? stockAfterUse / Math.max(1, supplyNeededUnits) : 99;
     const restockCoverage = getInventoryRestockCoverage(business, shortageRatio, supplyCoverageMonths);
-    const startupRestockRelief = isStartupSupportActive ? Math.max(0.76, 1 - startupSupportLevel * 0.6) : 1;
+    const startupRestockRelief = isStartupSupportActive ? Math.max(0.82, 1 - startupSupportLevel * 0.45) : 1;
     const restockTargetCost = roundMoney(restockGapUnits * supplyState.unitCost * restockCoverage * startupRestockRelief);
     const restockQuote = restockTargetCost > 0
       ? getProcurementQuote(business, restockTargetCost)
@@ -1156,7 +1186,7 @@
     const nextSupplyUnitCost = nextSupplyUnits > 0
       ? roundMoney(((stockAfterUse * supplyState.unitCost) + (restockQuote.purchasedUnits * restockQuote.unitCost)) / nextSupplyUnits)
       : supplyState.unitCost;
-    const startupCostRelief = isStartupSupportActive ? Math.max(0.86, 1 - startupSupportLevel * 0.45) : 1;
+    const startupCostRelief = isStartupSupportActive ? Math.max(0.9, 1 - startupSupportLevel * 0.28) : 1;
     const payroll = roundMoney(business.employees * business.salaryPerEmployee * difficultySettings.cost * startupCostRelief);
     const rent = roundMoney(business.units.reduce((sum, unit) => sum + unit.rent, 0) * difficultySettings.cost * startupCostRelief);
     const maintenance = roundMoney((business.valuation * 0.0018 + business.units.length * 160) * operatingReadiness * difficultySettings.cost * startupCostRelief);
@@ -1222,9 +1252,31 @@
     );
     const synergyValuationLift = 1 + ((Number(synergy.valuation) || 1) - 1) * 0.35;
     const takeoverValuationLift = 1 + ((Number(takeover.valuation) || 1) - 1) * 0.55;
+    const annualizedNetIncome = Math.max(0, netIncome) * 12;
+    const annualizedEbitda = Math.max(0, ebitda) * 12;
+    const annualizedCashFlow = Math.max(0, reportedCashFlow) * 12;
+    const earningsPower = annualizedNetIncome * 0.5 + annualizedEbitda * 0.2 + annualizedCashFlow * 0.3;
+    const operatingAssetSupport = Math.max(0, business.cash) * 0.52 + Math.max(0, business.inventory) * 0.18 + Math.max(0, business.receivables) * 0.22;
+    const seedValuationBase = Math.max(1000, Number(business.seedValuation) || 1000);
+    const valuationMultiple = getBusinessValuationMultiple(business);
+    let targetValuation = seedValuationBase * (business.type === "startup" ? 0.76 : 0.7) + earningsPower * valuationMultiple + operatingAssetSupport;
+
+    if (shortfall > 0) {
+      targetValuation *= 0.82;
+    } else if (netIncome < 0) {
+      targetValuation *= 0.9;
+    }
+
+    if (business.type === "startup" && currentDay - (Number(business.createdDay) || currentDay) <= 360) {
+      const youngBusinessCap = seedValuationBase * (2.8 + startupSupportLevel * 3.2) + annualizedNetIncome * 2.4;
+      targetValuation = Math.min(targetValuation, youngBusinessCap);
+    }
+
+    const valuationFloor = seedValuationBase * (business.type === "startup" ? 0.4 : 0.35);
+    const valuationMemory = business.type === "startup" ? 0.86 : 0.82;
     business.valuation = roundMoney(Math.max(
-      business.seedValuation * 0.35,
-      (business.valuation * 0.9 + Math.max(0, netIncome) * 10 + business.cash * 0.12) * synergyValuationLift * difficultySettings.valuation * takeoverValuationLift
+      valuationFloor,
+      (business.valuation * valuationMemory + targetValuation * (1 - valuationMemory)) * synergyValuationLift * difficultySettings.valuation * takeoverValuationLift
     ));
     const reserve = Math.max(1000, opex * 0.55 + supplierPayments * 0.35);
     const distributableByCash = roundMoney(Math.max(0, business.cash - reserve));
@@ -1615,6 +1667,7 @@
       plan.active = true;
       plan.lastOk = true;
       plan.lastMessage = `${meta.label} mensual programado por ${formatMoneyBrief(amount)}.`;
+      recordBusinessActivity(state, business, "schedule_monthly", 0.75);
       return { ok: true, message: `${business.name}: ${meta.label.toLowerCase()} mensual programado por ${formatMoneyBrief(amount)}.` };
     }
 
@@ -1643,6 +1696,7 @@
           gross: amount
         });
       }
+      recordBusinessActivity(state, business, "contribute", 1.1);
       return { ok: true, message: `Aportaste $${Math.round(amount).toLocaleString("en-US")} a ${business.name}.` };
     }
 
@@ -1654,12 +1708,14 @@
 
       business.employees += 1;
       business.cash = roundMoney(business.cash - hireCost);
+      recordBusinessActivity(state, business, "hire", 0.85);
       return { ok: true, message: `Contrataste personal en ${business.name}.` };
     }
 
     if (action === "fire") {
       business.employees = Math.max(0, business.employees - 1);
       business.morale = clamp(business.morale - 0.04, 0.1, 1.1);
+      recordBusinessActivity(state, business, "fire", 0.7);
       return { ok: true, message: `Reduciste plantilla en ${business.name}.` };
     }
 
@@ -1669,6 +1725,7 @@
       business.cash = roundMoney(business.cash - amount);
       business.marketing = roundMoney(business.marketing + amount * 0.28);
       business.reputation = clamp(business.reputation + amount / Math.max(1, business.valuation) * 0.14, 0.05, 1.2);
+      recordBusinessActivity(state, business, "marketing", 0.95);
       return { ok: true, message: `Campana de marketing aplicada en ${business.name}.` };
     }
 
@@ -1677,6 +1734,7 @@
       if (business.cash < amount) return { ok: false, message: "Caja empresarial insuficiente para I+D." };
       business.cash = roundMoney(business.cash - amount);
       applyRndInvestment(business, amount);
+      recordBusinessActivity(state, business, "rnd", 1);
       return { ok: true, message: `I+D reforzado en ${business.name}.` };
     }
 
@@ -1687,6 +1745,7 @@
       if (business.cash < amount) return { ok: false, message: "Caja empresarial insuficiente." };
       business.cash = roundMoney(business.cash - amount);
       const quote = purchaseSupplies(business, amount);
+      recordBusinessActivity(state, business, "inventory", 1);
       return { ok: true, message: `${business.name} compro ${Math.round(quote.purchasedUnits).toLocaleString("en-US")} ${business.supplies.unitLabel} de ${business.supplies.label}.` };
     }
 
@@ -1703,6 +1762,7 @@
       purchaseSupplies(business, amount, supplier);
       business.payables = roundMoney(business.payables + amount);
       business.suppliersReliability = clamp(business.suppliersReliability + 0.01, 0.25, 1);
+      recordBusinessActivity(state, business, "supplier_credit", 0.9);
       return { ok: true, message: `${business.name} compro insumos con credito comercial.` };
     }
 
@@ -1726,6 +1786,7 @@
         };
       });
       business.suppliersReliability = clamp(business.suppliersReliability + 0.06, 0.25, 1);
+      recordBusinessActivity(state, business, "supplier_negotiate", 1.15);
       return { ok: true, message: `${business.name} negocio mejores condiciones de proveedor.` };
     }
 
@@ -1743,16 +1804,19 @@
       }));
       business.payables = 0;
       business.suppliersReliability = clamp(business.suppliersReliability + 0.04, 0.25, 1);
+      recordBusinessActivity(state, business, "pay_supplier", 0.85);
       return { ok: true, message: `${business.name} pago proveedores y redujo riesgo operativo.` };
     }
 
     if (action === "price_up") {
       business.priceIndex = clamp(business.priceIndex + 0.05, 0.65, 1.55);
+      recordBusinessActivity(state, business, "price_up", 0.65);
       return { ok: true, message: `Precio medio subio en ${business.name}.` };
     }
 
     if (action === "price_down") {
       business.priceIndex = clamp(business.priceIndex - 0.05, 0.65, 1.55);
+      recordBusinessActivity(state, business, "price_down", 0.65);
       return { ok: true, message: `Precio medio bajo en ${business.name}.` };
     }
 
@@ -1766,6 +1830,7 @@
       }, business.sector));
       business.requiredEmployees = getRequiredEmployees(business);
       business.valuation = roundMoney(business.valuation + cost * 0.9);
+      recordBusinessActivity(state, business, "expand", 1.35);
       return { ok: true, message: `Nueva unidad abierta en ${business.name}.` };
     }
 
@@ -1799,6 +1864,7 @@
       }, business.sector));
       business.requiredEmployees = getRequiredEmployees(business);
       business.valuation = roundMoney(business.valuation + fee * 1.2);
+      recordBusinessActivity(state, business, "franchise", 1.4);
       return { ok: true, message: `${business.name} abrio una franquicia con fee inicial.` };
     }
 
@@ -1828,6 +1894,7 @@
           taxes: taxResult.tax
         });
       }
+      recordBusinessActivity(state, business, "dividend", 0.35);
       return { ok: true, message: `${business.name} distribuyo dividendos.` };
     }
 

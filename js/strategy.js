@@ -149,15 +149,15 @@
   ];
 
   const CONTRACT_REWARD_MULTIPLIERS = {
-    first_buy: 1.28,
-    active_trade: 1.08,
-    watchlist: 0.46,
-    diversify: 1.3,
-    cash_guard: 0.26,
-    risk_guard: 0.44,
-    read_news: 0.16,
-    business_health: 1.46,
-    hedge: 1.2
+    first_buy: 1.18,
+    active_trade: 1.16,
+    watchlist: 0.34,
+    diversify: 1.12,
+    cash_guard: 0.16,
+    risk_guard: 0.26,
+    read_news: 0.08,
+    business_health: 1.22,
+    hedge: 1.06
   };
 
   const PASSIVE_CONTRACTS = new Set(["cash_guard", "risk_guard", "read_news"]);
@@ -249,6 +249,23 @@
     };
   }
 
+  function normalizeActivityLog(value) {
+    return Array.isArray(value)
+      ? value.map((item) => {
+        if (!isObject(item)) return null;
+        const kind = typeof item.kind === "string" ? item.kind : "";
+        if (!kind) return null;
+        return {
+          kind,
+          day: toDay(item.day),
+          weight: clamp(Number(item.weight) || 1, 0.25, 2),
+          scope: typeof item.scope === "string" ? item.scope : "player",
+          businessId: typeof item.businessId === "string" ? item.businessId : ""
+        };
+      }).filter(Boolean).slice(-120)
+      : [];
+  }
+
   function normalizePrestige(value) {
     const source = isObject(value) ? value : {};
     return {
@@ -266,6 +283,7 @@
       scenarioApplied: Boolean(source.scenarioApplied),
       watchlist: normalizeWatchlist(source.watchlist),
       activeHedges: normalizeHedges(source.activeHedges),
+      activityLog: normalizeActivityLog(source.activityLog),
       contracts: normalizeContracts(source.contracts),
       advisors: isObject(source.advisors) ? {
         lastTipDay: Math.max(0, Math.floor(Number(source.advisors.lastTipDay) || 0))
@@ -449,6 +467,20 @@
     return state.strategy;
   }
 
+  function recordActivity(state, kind, options) {
+    const strategy = ensureStrategy(state);
+    if (!kind) return strategy.activityLog;
+    const settings = isObject(options) ? options : {};
+    strategy.activityLog = normalizeActivityLog(strategy.activityLog).concat({
+      kind: String(kind),
+      day: toDay(settings.day || (state && state.time && state.time.day)),
+      weight: clamp(Number(settings.weight) || 1, 0.25, 2),
+      scope: typeof settings.scope === "string" ? settings.scope : "player",
+      businessId: typeof settings.businessId === "string" ? settings.businessId : ""
+    }).slice(-120);
+    return strategy.activityLog;
+  }
+
   function getPlayerModule() {
     return window.CashEmpirePlayer || null;
   }
@@ -540,11 +572,18 @@
     const newBusinessCount = Array.isArray(state.businesses)
       ? state.businesses.filter((business) => (Number(business.createdDay) || 0) >= startDay).length
       : 0;
+    const businessActionScore = Array.isArray(strategyState.activityLog)
+      ? strategyState.activityLog.reduce((sum, item) => {
+        if (!item || (Number(item.day) || 0) < startDay) return sum;
+        return sum + clamp(Number(item.weight) || 0, 0.25, 2);
+      }, 0)
+      : 0;
     return {
       transactionCount,
       hedgeCount,
       newBusinessCount,
-      activeDecisions: transactionCount + hedgeCount + newBusinessCount
+      businessActionScore,
+      activeDecisions: transactionCount + hedgeCount + newBusinessCount + businessActionScore
     };
   }
 
@@ -753,8 +792,8 @@
       pesadilla: 1.26
     }[difficulty] || 1;
     const recent = getRecentDecisionSummary(state, 7);
-    const scaledReward = 180 + Math.sqrt(netWorth) * 0.12 + week * 6 + index * 75;
-    const rewardCap = Math.max(650, netWorth * 0.0018);
+    const scaledReward = 150 + Math.sqrt(netWorth) * 0.095 + week * 4 + index * 55;
+    const rewardCap = Math.max(520, netWorth * 0.00125);
     const baseReward = Math.round(Math.min(rewardCap, scaledReward) * difficultyRewardMultiplier);
     const basePower = index === 0 ? 2 : 1;
     const map = {
@@ -808,11 +847,11 @@
     let rewardMultiplier = CONTRACT_REWARD_MULTIPLIERS[kind] || 0.5;
     let rewardPower = basePower;
 
-    if (PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
+    if (PASSIVE_CONTRACTS.has(kind) && recent.activeDecisions < 1) {
       const hasEconomicExposure = metrics.positions.length > 0 || metrics.hasBusiness || metrics.debtCount > 0;
-      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.6 : 0;
+      rewardMultiplier = hasEconomicExposure ? rewardMultiplier * 0.4 : 0;
       rewardPower = Math.max(1, rewardPower - 1);
-    } else if (SUPPORT_CONTRACTS.has(kind) && recent.activeDecisions === 0) {
+    } else if (SUPPORT_CONTRACTS.has(kind) && recent.activeDecisions < 1) {
       rewardMultiplier *= metrics.positions.length > 0 || metrics.hasBusiness ? 1 : 0.45;
     }
 
@@ -1473,6 +1512,7 @@
     getTakeoverDividendModifier,
     getTakeoverBusinessModifiers,
     claimTakeover,
-    getAdvanceWarning
+    getAdvanceWarning,
+    recordActivity
   };
 })();
